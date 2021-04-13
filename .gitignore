@@ -1,0 +1,4 @@
+data
+*.pyc
+bus
+.DS_Store

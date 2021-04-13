@@ -14,11 +14,14 @@ import (
 )
 
 func main() {
-	// getBusRoute("12a8f7e3")
-	for i := 'A'; i <= 'Z'; i++ {
-		walkBus("https://m.8684.cn/shanghai_list" + string(i))
-	}
-	return
+	// readBus()
+	// return
+
+	// // getBusRoute("12a8f7e3")
+	// for i := 'A'; i <= 'Z'; i++ {
+	// 	walkBus("https://m.8684.cn/shanghai_list" + string(i))
+	// }
+	// return
 
 	readRaw := func(path string) []byte {
 		buf, _ := ioutil.ReadFile(path)
