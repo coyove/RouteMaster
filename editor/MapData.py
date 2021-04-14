@@ -1,8 +1,17 @@
+from PyQt5 import QtCore
 from PyQt5.QtCore import QPoint
 import PyQt5.QtSvg as QtSvg
 from PyQt5.QtWidgets import QWidget
 
 class MapData:
+    class Element:
+        id: str
+        svgData: bytes
+
+        def __init__(self, id = None, d = None) -> None:
+            self.svgData = d
+            self.id = id
+
     data1 = [] # Q1, include +x, include +y
     data2 = [] # Q2, exclude +y, include -x
     data3 = [] # Q3, exclude -x, include -y
@@ -31,7 +40,7 @@ class MapData:
             data[y].append(None)
         data[y][x] = d
 
-    def get(self, x: int, y: int):
+    def get(self, x: int, y: int) -> Element:
         data, x, y = self._which(x, y)
         if len(data) <= y:
             return None
@@ -40,23 +49,45 @@ class MapData:
         return data[y][x]
 
 class MapCell(QtSvg.QSvgWidget):
-    marginScale = 1.6
+    Base = 32
+
+    class Positioning:
+        Center = 1
+        Left = 2
+        LeftTop = 3
+        LeftBottom = 4
+        Top = 5
+        Right = 6
+        RightTop = 7
+        RightBottom = 8
+        Bottom = 9
+
+    positioning: Positioning = Positioning.Center
 
     def __init__(self, parent) -> None:
-        return super().__init__(parent)
-    
+        super().__init__(parent)
+        # self.setStyleSheet("border: 1px solid blue")
+        return 
+        
     def deleteFrom(self, parent: QWidget):
         parent.children().remove(self)
         self.deleteLater()
         
-    def move(self, x: int, y: int):
-        t = 1 / self.marginScale * (self.marginScale - 1) / 2
-        x = int(x - self.width() * t)
-        y = int(y - self.height() * t)
-        super().move(x, y)
+    def loadResizeMove(self, data: MapData.Element, scale: float, x: int, y: int):
+        self.current = data
+
+        super().load(data.svgData)
+        svgSize = self.sizeHint()
+        w, h = int(svgSize.width() * scale), int(svgSize.height() * scale)
         
-    def setFixedSize(self, w: int, h: int):
-        w = int(w * self.marginScale)
-        h = int(h * self.marginScale)
-        super().setFixedSize(w, h)
-        
+        self.posx, self.posy = x, y
+
+        x = int(x - (w - MapCell.Base * scale) / 2)
+        y = int(y - (h - MapCell.Base * scale) / 2)
+
+        # super().move(x, y)
+        # super().setFixedSize(w, h)
+        super().setGeometry(x, y, w, h)
+
+    def pos(self) -> QtCore.QPoint:
+        return QtCore.QPoint(self.posx, self.posy)
