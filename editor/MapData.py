@@ -1,5 +1,6 @@
 from PyQt5 import QtCore
 from PyQt5.QtCore import QPoint
+from PyQt5.QtGui import QImage, QPainter
 import PyQt5.QtSvg as QtSvg
 from PyQt5.QtWidgets import QWidget
 
@@ -32,13 +33,22 @@ class MapData:
             data = self.data3
         return data, x, y
 
-    def put(self, x: int, y: int, d):
+    def put(self, x: int, y: int, d: Element):
         data, x, y = self._which(x, y)
         while len(data) <= y:
             data.append([])
         while len(data[y]) <= x:
             data[y].append(None)
         data[y][x] = d
+        
+        if d:
+            r = QtSvg.QSvgWidget()
+            r.load(d.svgData)
+            img = QImage(r.sizeHint().width(), r.sizeHint().height(), QImage.Format.Format_ARGB32)
+            painter = QPainter(img)
+            r.render(painter)
+            img.save("1.png")
+            painter.end()
 
     def get(self, x: int, y: int) -> Element:
         data, x, y = self._which(x, y)
