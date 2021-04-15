@@ -1,22 +1,32 @@
+from PyQt5 import QtGui
 from PyQt5 import QtCore
-from PyQt5.QtCore import QPoint
-from PyQt5.QtGui import QImage, QPainter
+from PyQt5.QtCore import QPoint, QRectF
+from PyQt5.QtGui import QColor, QImage, QOpenGLContext, QPaintEvent, QPainter
 import PyQt5.QtSvg as QtSvg
 from PyQt5.QtWidgets import QWidget
 
+class SvgSource:
+    def __init__(self, parent, id, svgData: bytes) -> None:
+        self.svgData = svgData
+        self.svgId = id
+        self._renderer = QtSvg.QSvgWidget(parent)
+        self._renderer.load(svgData)
+        self._renderer.setVisible(False)
+
 class MapData:
     class Element:
-        id: str
-        svgData: bytes
-
-        def __init__(self, id = None, d = None) -> None:
-            self.svgData = d
+        def __init__(self, id = None, d: SvgSource = None) -> None:
             self.id = id
+            self.data = d
+            
+        def __str__(self) -> str:
+            return self.data and "({}:{})".format(self.id, self.data.svgId) or "(empty)"
 
-    data1 = [] # Q1, include +x, include +y
-    data2 = [] # Q2, exclude +y, include -x
-    data3 = [] # Q3, exclude -x, include -y
-    data4 = [] # Q4, exclude -y, exclude -x
+    def __init__(self) -> None:
+        self.data1 = [] # Q1, include +x, include +y
+        self.data2 = [] # Q2, exclude +y, include -x
+        self.data3 = [] # Q3, exclude -x, include -y
+        self.data4 = [] # Q4, exclude -y, exclude -x
     
     def _which(self, x: int, y: int):
         data = None
@@ -40,15 +50,6 @@ class MapData:
         while len(data[y]) <= x:
             data[y].append(None)
         data[y][x] = d
-        
-        if d:
-            r = QtSvg.QSvgWidget()
-            r.load(d.svgData)
-            img = QImage(r.sizeHint().width(), r.sizeHint().height(), QImage.Format.Format_ARGB32)
-            painter = QPainter(img)
-            r.render(painter)
-            img.save("1.png")
-            painter.end()
 
     def get(self, x: int, y: int) -> Element:
         data, x, y = self._which(x, y)
@@ -58,46 +59,42 @@ class MapData:
             return None
         return data[y][x]
 
-class MapCell(QtSvg.QSvgWidget):
+class MapCell:
     Base = 32
 
-    class Positioning:
-        Center = 1
-        Left = 2
-        LeftTop = 3
-        LeftBottom = 4
-        Top = 5
-        Right = 6
-        RightTop = 7
-        RightBottom = 8
-        Bottom = 9
-
-    positioning: Positioning = Positioning.Center
-
     def __init__(self, parent) -> None:
-        super().__init__(parent)
-        # self.setStyleSheet("border: 1px solid blue")
-        return 
+        self.current: MapData.Element = None
+        self.currentScale = 1.0
+        self.moving = False
+        self.parent = parent
+        self.visible = True
         
-    def deleteFrom(self, parent: QWidget):
-        parent.children().remove(self)
-        self.deleteLater()
+    def paint(self, p: QPainter): 
+        if not self.visible:
+            return
+        elif self.moving and self.parent.currentData != self.current:
+            blockSize = int(MapCell.Base * self.currentScale)
+            p.drawRect(self.posx, self.posy, blockSize, blockSize)
+        elif self.current:
+            self.current.data._renderer.setFixedSize(self.w, self.h)
+            p.save()
+            p.translate(self.x, self.y)
+            self.current.data._renderer.render(p, flags=QWidget.RenderFlag.DrawChildren)
+            p.restore()
         
     def loadResizeMove(self, data: MapData.Element, scale: float, x: int, y: int):
         self.current = data
-
-        super().load(data.svgData)
-        svgSize = self.sizeHint()
-        w, h = int(svgSize.width() * scale), int(svgSize.height() * scale)
+        self.currentScale = scale
+        # super().load(data.svgData)
+        # svgSize = self.sizeHint()
+        # w, h = int(svgSize.width() * scale), int(svgSize.height() * scale)
+        self.w = int(data.data._renderer.sizeHint().width() * scale)
+        self.h = int(data.data._renderer.sizeHint().height() * scale)
         
         self.posx, self.posy = x, y
 
-        x = int(x - (w - MapCell.Base * scale) / 2)
-        y = int(y - (h - MapCell.Base * scale) / 2)
-
-        # super().move(x, y)
-        # super().setFixedSize(w, h)
-        super().setGeometry(x, y, w, h)
+        self.x = int(x - (self.w - MapCell.Base * scale) / 2)
+        self.y = int(y - (self.h - MapCell.Base * scale) / 2)
 
     def pos(self) -> QtCore.QPoint:
         return QtCore.QPoint(self.posx, self.posy)

@@ -5,7 +5,7 @@ import PyQt5.QtSvg as QtSvg
 import PyQt5.QtGui as QtGui
 from PyQt5 import QtCore
 import random
-from MapData import MapData, MapCell
+from MapData import MapData, MapCell, SvgSource
 from Selection import Selection
 
 def mod(x, y):
@@ -18,54 +18,52 @@ class Map(QWidget):
         self.data = MapData()
         self.scale = 2
 
-        for i in range(0, 200):
+        sources = []
+        for i in range(0, 4):
+            sources.append(SvgSource(self, "id" + str(i), """
+                <svg height="48" width="48">
+                    <text x="8" y="24" fill="red">{}</text>
+                    <rect x="8" y="8" width="32" height="32" fill="transparent" stroke="#000"></rect>
+                </svg>""".format(i).encode('utf-8')))
+            
+        for i in range(0, 1000):
             l = int(random.random() * 15 + 10)
             d = random.random() * math.pi * 2
             x, y = int(l * math.cos(d)), int(l * math.sin(d))
-            if random.random() > 0.2:
-                self.data.put(x, y, MapData.Element("{}-{}".format(x,y), """
-                <svg height="48" width="48">
-                    <text x="8" y="24" fill="green">{} {}</text>
-                    <rect x="8" y="8" width="32" height="32" fill="transparent" stroke="#000"></rect>
-                </svg>""".format(x,y).encode('utf-8')))
-            else:
-                self.data.put(x, y, MapData.Element("{}-{}".format(x,y), """
-                <svg height="48" width="96">
-                    <text x="8" y="24" fill="red">{} {}</text>
-                    <rect x="8" y="8" width="32" height="32" fill="transparent" stroke="#000"></rect>
-                </svg>""".format(x,y).encode('utf-8')))
+            self.data.put(x, y, MapData.Element("{}-{}".format(x,y), sources[random.randrange(0, len(sources))]))
 
-        self.bg = QLabel(self)
-        self.bg.setStyleSheet("background: white")
-        self.bg.move(0, 0)
+        # self.bg = QLabel(self)
+        # self.bg.setStyleSheet("background: white")
+        # self.bg.move(0, 0)
         self.selector = Selection(self)
         self.svgBoxes = []
         self.svgBoxesRecycle = []
         self.svgBoxesRecycleLock = QtCore.QMutex()
-        t = QtCore.QTimer(self)
-        t.timeout.connect(self.svgGc)
-        t.start(30000)
+        self.currentData: MapData.Element = None
         self.viewOrigin = [0, 0]
         self.pan(0, 0) # fill svgBoxes
         self.setMouseTracking(True)
         self.pressPos = None
         self.pressHoldSel = False
         
-    def svgGc(self):
-        self.svgBoxesRecycleLock.lock()
-        for i in range(int(len(self.svgBoxesRecycle) / 2), len(self.svgBoxesRecycle)):
-            self.svgBoxesRecycle[i].deleteFrom(self)
-        self.svgBoxesRecycle = self.svgBoxesRecycle[:int(len(self.svgBoxesRecycle) / 2)]
-        self.svgBoxesRecycleLock.unlock()
-    
     def cacheSvgBoxLocked(self, cell):
         self.svgBoxesRecycle.append(cell)
-        cell.setVisible(False)
+        cell.visible = False
 
     def resizeEvent(self, a0: QtGui.QResizeEvent) -> None:
-        self.bg.setFixedSize(self.width(), self.height())
+        # self.bg.setFixedSize(self.width(), self.height())
         self.pan(0, 0)
         return super().resizeEvent(a0)
+    
+    def paintEvent(self, a0: QtGui.QPaintEvent) -> None:
+        p = QtGui.QPainter(self)
+        p.fillRect(0, 0, self.width(), self.height(), QtGui.QColor(255, 255, 255))
+        for row in self.svgBoxes:
+            for cell in row:
+                if cell:
+                    cell.paint(p)
+        p.end()
+        return super().paintEvent(a0)
     
     def pan(self, dx, dy, noUpdate = False):
         blockSize = MapCell.Base * self.scale
@@ -123,6 +121,7 @@ class Map(QWidget):
             -offsetX, -int(offsetX / blockSize), offsetY, int(offsetY / blockSize)))
         
         self.selectionEvent()
+        self.repaint()
         
     def findCellUnder(self, a0: QtGui.QMouseEvent):
         c = a0.pos()
@@ -155,15 +154,22 @@ class Map(QWidget):
         return p
     
     def selectionEvent(self, action=None, d=None):
+        print(d)
         self.findMainWin().barSelection.setText(self.selector.status())
 
     def mousePressEvent(self, a0: QtGui.QMouseEvent) -> None:
+        d, cell, pt = self.findCellUnder(a0)
         if a0.buttons() & QtCore.Qt.MouseButton.MidButton:
             self.pressPos = a0.pos()
             QApplication.setOverrideCursor(QtCore.Qt.CursorShape.DragMoveCursor)
+            if len(self.svgBoxes) * len(self.svgBoxes[0]) > 1600:
+                for row in self.svgBoxes:
+                    for c in row:
+                        if c:
+                            c.moving = True
+            self.currentData = d
         else:
             self.pressPos = None
-            d, cell, pt = self.findCellUnder(a0)
             cell: MapCell
             if d and cell:
                 self.selector.addSelection(d, cell.pos(), int(MapCell.Base * self.scale))
@@ -194,7 +200,14 @@ class Map(QWidget):
         self.pressPos = None
         self.pressHoldSel = False
         QApplication.restoreOverrideCursor()
+        for row in self.svgBoxes:
+            for cell in row:
+                if cell:
+                    cell.moving = False
+        for cell in self.svgBoxesRecycle:
+            cell.moving = False
         self.pan(0, 0)
+        self.update()
         return super().mouseReleaseEvent(a0)
     
     def wheelEvent(self, a0: QtGui.QWheelEvent) -> None:
@@ -213,16 +226,11 @@ class Map(QWidget):
     
     def _newSvg(self):
         if len(self.svgBoxesRecycle) > 0:
-            self.svgBoxesRecycleLock.lock()
             cell: MapCell = self.svgBoxesRecycle[-1]
             self.svgBoxesRecycle = self.svgBoxesRecycle[:-1]
-            cell.setVisible(True)
-            self.svgBoxesRecycleLock.unlock()
+            cell.visible = True
             return cell
         s = MapCell(self)
-        s.setAttribute(QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-        s.show()
-        print(random.random())
         return s
     
 class Window(QMainWindow):
