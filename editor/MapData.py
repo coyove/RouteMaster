@@ -15,10 +15,15 @@ class SvgSource:
 
 class MapData:
     class Element:
-        def __init__(self, id = None, d: SvgSource = None) -> None:
+        def __init__(self, id = None, d: SvgSource = None, x = 0, y = 0) -> None:
             self.id = id
             self.data = d
+            self.x = x
+            self.y = y
             
+        def valid(self):
+            return self and self.data
+        
         def __str__(self) -> str:
             return self.data and "({}:{})".format(self.id, self.data.svgId) or "(empty)"
 
@@ -44,6 +49,7 @@ class MapData:
         return data, x, y
 
     def put(self, x: int, y: int, d: Element):
+        d.x, d.y = x, y
         data, x, y = self._which(x, y)
         while len(data) <= y:
             data.append([])
@@ -58,6 +64,14 @@ class MapData:
         if len(data[y]) <= x:
             return None
         return data[y][x]
+       
+    def delete(self, x: int, y: int):
+        data, x, y = self._which(x, y)
+        if len(data) <= y:
+            return None
+        if len(data[y]) <= x:
+            return None
+        data[y][x] = None
 
 class MapCell:
     Base = 32
@@ -67,20 +81,16 @@ class MapCell:
         self.currentScale = 1.0
         self.moving = False
         self.parent = parent
-        self.visible = True
         
     def paint(self, p: QPainter): 
-        if not self.visible:
-            return
-        elif self.moving and self.parent.currentData != self.current:
+        if self.moving and self.parent.currentData != self.current:
             blockSize = int(MapCell.Base * self.currentScale)
             p.drawRect(self.posx, self.posy, blockSize, blockSize)
         elif self.current:
             self.current.data._renderer.setFixedSize(self.w, self.h)
-            p.save()
             p.translate(self.x, self.y)
             self.current.data._renderer.render(p, flags=QWidget.RenderFlag.DrawChildren)
-            p.restore()
+            p.translate(-self.x, -self.y)
         
     def loadResizeMove(self, data: MapData.Element, scale: float, x: int, y: int):
         self.current = data
@@ -92,7 +102,6 @@ class MapCell:
         self.h = int(data.data._renderer.sizeHint().height() * scale)
         
         self.posx, self.posy = x, y
-
         self.x = int(x - (self.w - MapCell.Base * scale) / 2)
         self.y = int(y - (self.h - MapCell.Base * scale) / 2)
 
