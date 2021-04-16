@@ -1,4 +1,3 @@
-from editor import Map
 from math import trunc
 from PyQt5 import QtCore
 from PyQt5.QtWidgets import QLabel
@@ -27,10 +26,14 @@ class Selection:
         label.show()
         l = { "data": data, "w": label}
         self.labels.append(l)
+        print(self.dedup.keys())
         self.dedup[data.id] = l
         self.parent.selectionEvent(Selection.Add, data)
         
     def delSelection(self, data: MapData.Element):
+        print("del", data.id, self.dedup.keys())
+        if not data.id or not data.id in self.dedup:
+            return 
         x = self.dedup[data.id]
         del self.dedup[data.id]
         self.parent.children().remove(x["w"])

@@ -44,6 +44,19 @@ class Map(QWidget):
         self.setMouseTracking(True)
         self.pressPos = None
         self.pressHoldSel = False
+        self.ctrl = False
+        self.shift = False
+        self.setFocusPolicy(QtCore.Qt.FocusPolicy.ClickFocus)
+        
+    def keyPressEvent(self, a0: QtGui.QKeyEvent) -> None:
+        self.shift = bool(a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier)
+        self.ctrl = bool(a0.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier)
+        return super().keyPressEvent(a0)
+    
+    def keyReleaseEvent(self, a0: QtGui.QKeyEvent) -> None:
+        # self.shift = not bool(a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier)
+        # self.ctrl = not bool(a0.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier)
+        return super().keyReleaseEvent(a0)
         
     def cacheSvgBoxLocked(self, cell):
         self.svgBoxesRecycle.append(cell)
@@ -175,9 +188,15 @@ class Map(QWidget):
                     self.selector.addSelection(d, pt, int(MapCell.Base * self.scale))
                     self.dragger.start(a0.x(), a0.y())
                 else:
-                    if not a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier:
+                    self.shift = bool(a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier )
+                    self.ctrl = bool(a0.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier)
+                    if not self.shift and not self.ctrl:
                         self.selector.clear()
-                    self.selector.addSelection(d, pt, int(MapCell.Base * self.scale))
+                    if self.ctrl:
+                        self.selector.delSelection(d)
+                        self.dragger.start(a0.x(), a0.y())
+                    else:
+                        self.selector.addSelection(d, pt, int(MapCell.Base * self.scale))
         return super().mousePressEvent(a0)           
 
     def mouseMoveEvent(self, a0: QtGui.QMouseEvent) -> None:
@@ -189,8 +208,15 @@ class Map(QWidget):
             d, cell, pt = self.findCellUnder(a0)
             cell: MapCell
             if d:
-                if a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier:
+                if self.shift:
                     self.selector.addSelection(d, pt, int(MapCell.Base * self.scale))
+                elif self.ctrl:
+                    print("del", pt)
+                    self.hover.pt = pt or self.hover.pt
+                    self.hover.size = int(self.scale * MapCell.Base)
+                    self.dragger.drag(a0.x(), a0.y())
+                    self.repaint()
+                    self.selector.delSelection(d)
                 elif self.dragger.started:
                     self.hover.pt = pt or self.hover.pt
                     self.hover.size = int(self.scale * MapCell.Base)
@@ -203,6 +229,7 @@ class Map(QWidget):
         self.pressPos = None
         self.pressHoldSel = False
         self.hover.size = 0
+        self.shift = self.ctrl = False
         
         dx, dy = self.dragger.end(int(MapCell.Base * self.scale))
         if dx != 0 or dy != 0:
