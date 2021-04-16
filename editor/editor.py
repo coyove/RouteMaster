@@ -31,7 +31,7 @@ class Map(QWidget):
             l = int(random.random() * 15 + 10)
             d = random.random() * math.pi * 2
             x, y = int(l * math.cos(d)), int(l * math.sin(d))
-            self.data._put(x, y, MapData.Element("{}-{}".format(x,y), sources[random.randrange(0, len(sources))]))
+            self.data._put(x, y, MapData.Element(sources[random.randrange(0, len(sources))]))
 
         self.selector = Selection(self)
         self.dragger = DragController(self)
@@ -134,7 +134,7 @@ class Map(QWidget):
         if x_ == x or y_ == y:
             return None, None, None
 
-        d = self.data.get(x, y) or MapData.Element(id="{}-{}".format(x, y), x = x, y = y)
+        d = self.data.get(x, y) or MapData.Element(x = x, y = y)
 
         sx, sy = self.deltaxy()
         ix = math.ceil((c.x() - sx) / blockSize) 
@@ -189,7 +189,6 @@ class Map(QWidget):
                 leadx, leady = c[0].x, c[0].y
                 for el in c:
                     el: MapData.Element
-                    el.id = el.id + '-copy'
                     self.data.put(el.x - leadx + x, el.y - leady + y, el)
                 self.selector.clear()
                 self.pan(0, 0)

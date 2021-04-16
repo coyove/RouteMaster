@@ -34,20 +34,19 @@ class Selection:
                 p.fillRect(l.x + x, l.y + y, l.size, l.size, QColor(255, 255, 0, l.oddeven() and 90 or 45))
         
     def addSelection(self, data: MapData.Element, pos: QtCore.QPoint, size):
-        if data.id in self.dedup:
+        if id(data) in self.dedup:
             return
 
         label = Selection.Block(data, pos, size)
         self.labels.append(label)
-        self.dedup[data.id] = label
+        self.dedup[id(data)] = label
         self.parent.selectionEvent(Selection.Add, data)
         
     def delSelection(self, data: MapData.Element):
-        # print("del", data.id, self.dedup.keys())
-        if not data.id or not data.id in self.dedup:
+        if not id(data) in self.dedup:
             return 
-        x = self.dedup[data.id]
-        del self.dedup[data.id]
+        x = self.dedup[id(data)]
+        del self.dedup[id(data)]
         self.labels.remove(x)
         
     def moveIncr(self, x, y, size):

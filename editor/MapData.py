@@ -25,8 +25,7 @@ class SvgSource:
 
 class MapData:
     class Element:
-        def __init__(self, id = None, d: SvgSource = None, x = 0, y = 0) -> None:
-            self.id = id
+        def __init__(self, d: SvgSource = None, x = 0, y = 0) -> None:
             self.data = d
             self.x = x
             self.y = y
@@ -35,20 +34,19 @@ class MapData:
             return self and self.data
         
         def __str__(self) -> str:
-            return self.data and "({}:{})".format(self.id, self.data.svgId) or "(empty)"
+            return self.data and "({})".format(self.data.svgId) or "(empty)"
         
         def pack(self):
             return json.dumps({
                 "cellX": self.x,
                 "cellY": self.y,
-                "cellId": self.id,
                 "svgId": self.data and self.data.svgId or "0",
             })
         
         def unpack(data):
             try:
                 x = json.loads(data)
-                return MapData.Element(x["cellId"], SvgSource.get(x["svgId"]), x["cellX"], x["cellY"])
+                return MapData.Element(SvgSource.get(x["svgId"]), x["cellX"], x["cellY"])
             except Exception as e:
                 print(e)
             
@@ -56,11 +54,7 @@ class MapData:
         def __init__(self, x, y, d) -> None:
             self.x = x
             self.y = y
-            if d:
-                self.id = d.id
-                self.svgId = d.data and d.data.svgId or ""
-            else:
-                self.id = self.svgId = ''
+            self.svgId = (d and d.data) and d.data.svgId or ""
 
     def __init__(self) -> None:
         self.data1 = [] # Q1, include +x, include +y
@@ -132,8 +126,8 @@ class MapData:
             h = self.history.pop()
             if not h:
                 break
-            if h.id:
-                self._put(h.x, h.y, MapData.Element(h.id, SvgSource.get(h.svgId)))
+            if h.svgId:
+                self._put(h.x, h.y, MapData.Element(SvgSource.get(h.svgId)))
             else:
                 self._delete(h.x, h.y)
 
