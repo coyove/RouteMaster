@@ -20,7 +20,7 @@ class Map(QWidget):
         self.scale = 2
 
         sources = []
-        for i in range(0, 4):
+        for i in range(0, 10):
             sources.append(SvgSource(self, "id" + str(i), """
                 <svg height="48" width="48">
                     <text x="8" y="24" fill="red">{}</text>
@@ -31,7 +31,7 @@ class Map(QWidget):
             l = int(random.random() * 15 + 10)
             d = random.random() * math.pi * 2
             x, y = int(l * math.cos(d)), int(l * math.sin(d))
-            self.data.put(x, y, MapData.Element("{}-{}".format(x,y), sources[random.randrange(0, len(sources))]))
+            self.data._put(x, y, MapData.Element("{}-{}".format(x,y), sources[random.randrange(0, len(sources))]))
 
         self.selector = Selection(self)
         self.dragger = DragController(self)
@@ -44,19 +44,7 @@ class Map(QWidget):
         self.setMouseTracking(True)
         self.pressPos = None
         self.pressHoldSel = False
-        self.ctrl = False
-        self.shift = False
         self.setFocusPolicy(QtCore.Qt.FocusPolicy.ClickFocus)
-        
-    def keyPressEvent(self, a0: QtGui.QKeyEvent) -> None:
-        self.shift = bool(a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier)
-        self.ctrl = bool(a0.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier)
-        return super().keyPressEvent(a0)
-    
-    def keyReleaseEvent(self, a0: QtGui.QKeyEvent) -> None:
-        # self.shift = not bool(a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier)
-        # self.ctrl = not bool(a0.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier)
-        return super().keyReleaseEvent(a0)
         
     def cacheSvgBoxLocked(self, cell):
         self.svgBoxesRecycle.append(cell)
@@ -67,11 +55,13 @@ class Map(QWidget):
     
     def paintEvent(self, a0: QtGui.QPaintEvent) -> None:
         p = QtGui.QPainter(self)
+        p.setRenderHint(QtGui.QPainter.RenderHint.HighQualityAntialiasing)
         p.fillRect(0, 0, self.width(), self.height(), QtGui.QColor(255, 255, 255))
         for row in self.svgBoxes:
             for cell in row:
                 if cell:
                     cell.paint(p)
+        self.selector.paint(p)
         self.dragger.paint(p)
         self.hover.paint(p)
         p.end()
@@ -167,6 +157,58 @@ class Map(QWidget):
     def selectionEvent(self, action=None, d=None):
         # print(d)
         self.findMainWin().barSelection.setText(self.selector.status())
+        
+    def keyPressEvent(self, a0: QtGui.QKeyEvent) -> None:
+        delete = a0.key() == QtCore.Qt.Key.Key_Delete
+        ctrl = QtGui.QGuiApplication.keyboardModifiers() & QtCore.Qt.KeyboardModifier.ControlModifier 
+          
+        if ctrl and (a0.key() == QtCore.Qt.Key.Key_C or a0.key() == QtCore.Qt.Key.Key_X):
+            delete = a0.key() == QtCore.Qt.Key.Key_X
+            s = []
+            for l in self.selector.labels:
+                s.append(l.data.pack())
+            QtGui.QGuiApplication.clipboard().setText("{}".join(s))
+            
+        if delete:
+            self.data.begin()
+            for l in self.selector.labels:
+                self.data.delete(l.data.x, l.data.y)
+            self.selector.clear()
+            self.pan(0, 0)
+            
+        if ctrl and a0.key() == QtCore.Qt.Key.Key_V and len(self.selector.labels) == 1:
+            l = self.selector.labels[0]
+            x, y = l.data.x, l.data.y
+            c = []
+            for s in QtGui.QGuiApplication.clipboard().text().split('{}'):
+                d = MapData.Element.unpack(s)
+                if d:
+                    c.append(d)
+            if len(c):
+                self.data.begin()
+                leadx, leady = c[0].x, c[0].y
+                for el in c:
+                    el: MapData.Element
+                    el.id = el.id + '-copy'
+                    self.data.put(el.x - leadx + x, el.y - leady + y, el)
+                self.selector.clear()
+                self.pan(0, 0)
+                
+        if ctrl and a0.key() == QtCore.Qt.Key.Key_Z:
+            self.data.rewind()
+            self.selector.clear()
+            self.pan(0, 0)
+
+        return super().keyPressEvent(a0)
+    
+    def _toggleSvgBoxesMoving(self, v):
+        for row in self.svgBoxes:
+            for c in row:
+                if c:
+                    c.moving = v
+        for c in self.svgBoxesRecycle:
+            c.moving = v
+        
 
     def mousePressEvent(self, a0: QtGui.QMouseEvent) -> None:
         d, cell, pt = self.findCellUnder(a0)
@@ -175,10 +217,7 @@ class Map(QWidget):
             self.pressPos = a0.pos()
             QApplication.setOverrideCursor(QtCore.Qt.CursorShape.DragMoveCursor)
             if len(self.svgBoxes) * len(self.svgBoxes[0]) > 1600:
-                for row in self.svgBoxes:
-                    for c in row:
-                        if c:
-                            c.moving = True
+                self._toggleSvgBoxesMoving(True)
             self.currentData = d
         else:
             self.pressPos = None
@@ -186,17 +225,17 @@ class Map(QWidget):
             if d:
                 if a0.buttons() & QtCore.Qt.MouseButton.RightButton:
                     self.selector.addSelection(d, pt, int(MapCell.Base * self.scale))
-                    self.dragger.start(a0.x(), a0.y())
+                    self.dragger.start(a0.x(), a0.y(), pt)
                 else:
-                    self.shift = bool(a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier )
-                    self.ctrl = bool(a0.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier)
-                    if not self.shift and not self.ctrl:
-                        self.selector.clear()
-                    if self.ctrl:
-                        self.selector.delSelection(d)
-                        self.dragger.start(a0.x(), a0.y())
-                    else:
+                    if a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier:
                         self.selector.addSelection(d, pt, int(MapCell.Base * self.scale))
+                    elif a0.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier:
+                        self.selector.delSelection(d)
+                    else:
+                        self.selector.clear()
+                        self.selector.addSelection(d, pt, int(MapCell.Base * self.scale))
+
+        self.repaint()
         return super().mousePressEvent(a0)           
 
     def mouseMoveEvent(self, a0: QtGui.QMouseEvent) -> None:
@@ -208,43 +247,31 @@ class Map(QWidget):
             d, cell, pt = self.findCellUnder(a0)
             cell: MapCell
             if d:
-                if self.shift:
-                    self.selector.addSelection(d, pt, int(MapCell.Base * self.scale))
-                elif self.ctrl:
-                    print("del", pt)
-                    self.hover.pt = pt or self.hover.pt
-                    self.hover.size = int(self.scale * MapCell.Base)
-                    self.dragger.drag(a0.x(), a0.y())
-                    self.repaint()
-                    self.selector.delSelection(d)
-                elif self.dragger.started:
-                    self.hover.pt = pt or self.hover.pt
-                    self.hover.size = int(self.scale * MapCell.Base)
-                    self.dragger.drag(a0.x(), a0.y())
-                    self.repaint()
-            
+                if a0.buttons() & QtCore.Qt.MouseButton.RightButton:
+                    # self.hover.pt = pt or self.hover.pt
+                    # self.hover.size = int(self.scale * MapCell.Base)
+                    self.dragger.drag(a0.x(), a0.y(), pt)
+                else:
+                    if a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier:
+                        self.selector.addSelection(d, pt, int(MapCell.Base * self.scale))
+                    elif a0.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier:
+                        self.selector.delSelection(d)
+            self.repaint()
         return super().mouseMoveEvent(a0)
     
     def mouseReleaseEvent(self, a0: QtGui.QMouseEvent) -> None:
         self.pressPos = None
         self.pressHoldSel = False
-        self.hover.size = 0
-        self.shift = self.ctrl = False
+        # self.hover.size = 0
         
         dx, dy = self.dragger.end(int(MapCell.Base * self.scale))
         if dx != 0 or dy != 0:
             self.selector.move(dx, dy)
 
         QApplication.restoreOverrideCursor()
-        for row in self.svgBoxes:
-            for cell in row:
-                if cell:
-                    cell.moving = False
-        for cell in self.svgBoxesRecycle:
-            cell.moving = False
+        self._toggleSvgBoxesMoving(False)
 
         self.pan(0, 0)
-        self.repaint()
         return super().mouseReleaseEvent(a0)
     
     def wheelEvent(self, a0: QtGui.QWheelEvent) -> None:
