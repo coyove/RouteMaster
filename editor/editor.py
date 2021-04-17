@@ -1,13 +1,13 @@
 from typing import ValuesView
 from SvgList import SvgList
 import math
-from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QStatusBar, QLabel, QSplitter, qDrawBorderPixmap
+from PyQt5.QtWidgets import QApplication, QGraphicsScale, QMainWindow, QVBoxLayout, QWidget, QStatusBar, QLabel, QSplitter, qDrawBorderPixmap
 import PyQt5.QtSvg as QtSvg
 import PyQt5.QtGui as QtGui
 from PyQt5 import QtCore
 import random
 from MapData import MapData, MapCell, SvgSource
-from Selection import DragController, HoverController, Selection
+from Controller import DragController, HoverController, Selection
 
 def mod(x, y):
     return x - int(x/y) * y
@@ -128,25 +128,20 @@ class Map(QWidget):
     def findCellUnder(self, a0: QtGui.QMouseEvent, c: QtCore.QPoint = None):
         c = a0 and a0.pos() or c
         blockSize = int(MapCell.Base * self.scale)
+        sx, sy = self.deltaxy()
+        ix = math.ceil((c.x() - sx) / blockSize) 
+        iy = math.ceil((c.y() - sy) / blockSize)
+        pt = QtCore.QPoint((c.x() - sx) // blockSize * blockSize + sx, (c.y() - sy) // blockSize * blockSize + sy)
         x_ = ((c.x() - self.viewOrigin[0]) / blockSize)
         y_ = ((c.y() - self.viewOrigin[1]) / blockSize)
         x, y = math.ceil(x_), math.ceil(y_)
         if x_ == x or y_ == y:
-            return None, None, None
-
+            return None, None, pt
         d = self.data.get(x, y) or MapData.Element(x = x, y = y)
-
-        sx, sy = self.deltaxy()
-        ix = math.ceil((c.x() - sx) / blockSize) 
-        iy = math.ceil((c.y() - sy) / blockSize)
-        x2 = int((c.x() - sx) / blockSize) * blockSize + sx
-        y2 = int((c.y() - sy) / blockSize) * blockSize + sy
         if iy >= len(self.svgBoxes) or ix >= len(self.svgBoxes[iy]):
-            return None, None, None
-        
+            return None, None, pt
         cell = self.svgBoxes[iy][ix]
-        # print(d.id, x2, y2)
-        return d, cell, QtCore.QPoint(x2, y2)
+        return d, cell, pt
     
     def findMainWin(self):
         p = self.parent()
@@ -176,9 +171,7 @@ class Map(QWidget):
             self.selector.clear()
             self.pan(0, 0)
             
-        if ctrl and a0.key() == QtCore.Qt.Key.Key_V and len(self.selector.labels) == 1:
-            l = self.selector.labels[0]
-            x, y = l.data.x, l.data.y
+        if ctrl and a0.key() == QtCore.Qt.Key.Key_V:
             c = []
             for s in QtGui.QGuiApplication.clipboard().text().split('{}'):
                 d = MapData.Element.unpack(s)
@@ -186,16 +179,21 @@ class Map(QWidget):
                     c.append(d)
             if len(c):
                 self.data.begin()
-                leadx, leady = c[0].x, c[0].y
-                for el in c:
-                    el: MapData.Element
-                    self.data.put(el.x - leadx + x, el.y - leady + y, el)
                 self.selector.clear()
-                self.pan(0, 0)
+                self.hover.hold(c)
+                self.dragger.start(0, 0, QtCore.QPoint(0, 0))
+                self.dragger.visible = False
+                self.pressHoldSel = True
                 
         if ctrl and a0.key() == QtCore.Qt.Key.Key_Z:
             self.data.rewind()
             self.selector.clear()
+            self.pan(0, 0)
+            
+        if a0.key() == QtCore.Qt.Key.Key_Escape:
+            self.selector.clear()
+            self.hover.clear()
+            self.dragger.reset()
             self.pan(0, 0)
 
         return super().keyPressEvent(a0)
@@ -218,6 +216,9 @@ class Map(QWidget):
             if len(self.svgBoxes) * len(self.svgBoxes[0]) > 1600:
                 self._toggleSvgBoxesMoving(True)
             self.currentData = d
+        elif len(self.hover.labels) > 0:
+            self.hover.end()
+            self.pressHoldSel = False
         else:
             self.pressPos = None
             self.pressHoldSel = True
@@ -236,6 +237,9 @@ class Map(QWidget):
 
         self.repaint()
         return super().mousePressEvent(a0)           
+    
+    def _blocksize(self):
+        return int(self.scale * MapCell.Base)
 
     def mouseMoveEvent(self, a0: QtGui.QMouseEvent) -> None:
         if isinstance(self.pressPos, QtCore.QPoint):
@@ -246,7 +250,7 @@ class Map(QWidget):
             d, cell, pt = self.findCellUnder(a0)
             cell: MapCell
             if d:
-                if a0.buttons() & QtCore.Qt.MouseButton.RightButton:
+                if self.dragger.started:
                     # self.hover.pt = pt or self.hover.pt
                     # self.hover.size = int(self.scale * MapCell.Base)
                     self.dragger.drag(a0.x(), a0.y(), pt)
@@ -260,12 +264,14 @@ class Map(QWidget):
     
     def mouseReleaseEvent(self, a0: QtGui.QMouseEvent) -> None:
         self.pressPos = None
-        self.pressHoldSel = False
-        # self.hover.size = 0
         
-        dx, dy = self.dragger.end(int(MapCell.Base * self.scale))
-        if dx != 0 or dy != 0:
-            self.selector.move(dx, dy)
+        if self.hover.labels:
+            pass # hover depends on dragger, so we don't end it
+        else:
+            self.pressHoldSel = False
+            dx, dy = self.dragger.end()
+            if dx != 0 or dy != 0:
+                self.selector.move(dx, dy)
 
         QApplication.restoreOverrideCursor()
         self._toggleSvgBoxesMoving(False)
@@ -274,6 +280,9 @@ class Map(QWidget):
         return super().mouseReleaseEvent(a0)
     
     def wheelEvent(self, a0: QtGui.QWheelEvent) -> None:
+        if self.selector.labels and self.pressHoldSel:
+            return super().wheelEvent(a0)
+            
         lastScale = self.scale
         if a0.angleDelta().y() > 0:
             self.scale = min(self.scale * 2, 32)

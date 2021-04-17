@@ -34,6 +34,8 @@ class Selection:
                 p.fillRect(l.x + x, l.y + y, l.size, l.size, QColor(255, 255, 0, l.oddeven() and 90 or 45))
         
     def addSelection(self, data: MapData.Element, pos: QtCore.QPoint, size):
+        if not data.data:
+            return
         if id(data) in self.dedup:
             return
 
@@ -79,14 +81,37 @@ class Selection:
 class HoverController:
     def __init__(self, parent) -> None:
         self.parent = parent
-        self.pt = QtCore.QPoint(0, 0)
-        self.size = 0
+        self.labels: typing.List[Selection.Block] = []
+        
+    def clear(self):
+        self.labels = self.labels[:0]
+        
+    def hold(self, data: typing.List[Selection.Block]):
+        self.labels = data
         
     def paint(self, p: QPainter):
-        if self.size == 0:
-            return
-        p.fillRect(self.pt.x(), self.pt.y(), self.size, self.size, QColor(0, 0, 255, 60))
+        d: DragController = self.parent.dragger
+        bs = self.parent._blocksize()
+        x, y = d.dragtonorm.x(), d.dragtonorm.y()
+        for l in self.labels:
+            p.fillRect((l.x - self.labels[0].x ) * bs + x, (l.y - self.labels[0].y) * bs + y, bs, bs, QColor(255, 255, 0, 45))
     
+    def end(self):
+        if len(self.labels) == 0:
+            return
+        d: MapData = self.parent.data
+        d.begin()
+
+        dd: DragController = self.parent.dragger
+        d1, _, _ = dd.parent.findCellUnder(None, QtCore.QPoint(dd.dragtox, dd.dragtoy))
+
+        if d1:
+            x, y = self.labels[0].x, self.labels[0].y
+            for l in self.labels:
+                d.put(l.x - x + d1.x, l.y - y + d1.y, l)
+
+        self.clear()
+
 class DragController:
     Size = 12
 
@@ -103,6 +128,7 @@ class DragController:
         self.dragtoy = 0
         self.dragtonorm = self.startnorm = QtCore.QPoint(0, 0)
         self.started = False
+        self.visible = True
     
     def start(self, x: int, y: int, normalized: QtCore.QPoint):
         self.startx = self.dragtox = x
@@ -115,7 +141,7 @@ class DragController:
         self.dragtoy = y
         self.dragtonorm = normalized 
         
-    def end(self, size):
+    def end(self):
         if not self.started:
             return 0, 0
 
@@ -129,6 +155,9 @@ class DragController:
         
     def paint(self, p: QPainter):
         if not self.started:
+            return
+        
+        if not self.visible:
             return
         
         p.save()
