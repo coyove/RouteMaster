@@ -119,8 +119,7 @@ class Map(QWidget):
                     self.svgBoxes[y][x] = cell
                     cell.loadResizeMove(tmp, self.scale, x * int(blockSize) + sx - blockSize, y * int(blockSize) + sy - blockSize)
                 
-        self.findMainWin().barPosition.setText( 'x:{}({}) y:{}({})'.format(
-            -offsetX, -int(offsetX / blockSize), offsetY, int(offsetY / blockSize)))
+        self.findMainWin().barPosition.setText('x:{}({}) y:{}({})'.format(-offsetX, -int(offsetX / blockSize), offsetY, int(offsetY / blockSize)))
         
         self.selectionEvent()
         self.repaint()
@@ -131,7 +130,7 @@ class Map(QWidget):
         sx, sy = self.deltaxy()
         ix = math.ceil((c.x() - sx) / blockSize) 
         iy = math.ceil((c.y() - sy) / blockSize)
-        pt = QtCore.QPoint((c.x() - sx) // blockSize * blockSize + sx, (c.y() - sy) // blockSize * blockSize + sy)
+        pt = QtCore.QPoint(int((c.x() - sx) / blockSize) * blockSize + sx, int((c.y() - sy) / blockSize) * blockSize + sy)
         x_ = ((c.x() - self.viewOrigin[0]) / blockSize)
         y_ = ((c.y() - self.viewOrigin[1]) / blockSize)
         x, y = math.ceil(x_), math.ceil(y_)
@@ -219,6 +218,7 @@ class Map(QWidget):
         elif len(self.hover.labels) > 0:
             self.hover.end()
             self.pressHoldSel = False
+            self.pan(0, 0)
         else:
             self.pressPos = None
             self.pressHoldSel = True
@@ -234,8 +234,7 @@ class Map(QWidget):
                     else:
                         self.selector.clear()
                         self.selector.addSelection(d, pt, int(MapCell.Base * self.scale))
-
-        self.repaint()
+            self.repaint()
         return super().mousePressEvent(a0)           
     
     def _blocksize(self):
@@ -297,7 +296,7 @@ class Map(QWidget):
         return super().wheelEvent(a0)
     
     def _newSvg(self):
-        if len(self.svgBoxesRecycle) > 0:
+        if self.svgBoxesRecycle:
             cell: MapCell = self.svgBoxesRecycle[-1]
             self.svgBoxesRecycle = self.svgBoxesRecycle[:-1]
             return cell

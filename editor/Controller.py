@@ -94,7 +94,7 @@ class HoverController:
         bs = self.parent._blocksize()
         x, y = d.dragtonorm.x(), d.dragtonorm.y()
         for l in self.labels:
-            p.fillRect((l.x - self.labels[0].x ) * bs + x, (l.y - self.labels[0].y) * bs + y, bs, bs, QColor(255, 255, 0, 45))
+            p.fillRect((l.x - self.labels[0].x ) * bs + x, (l.y - self.labels[0].y) * bs + y, bs, bs, QColor(100, 120, 120, 45))
     
     def end(self):
         if len(self.labels) == 0:

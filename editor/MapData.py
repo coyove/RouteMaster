@@ -57,60 +57,27 @@ class MapData:
             self.svgId = (d and d.data) and d.data.svgId or ""
 
     def __init__(self) -> None:
-        self.data1 = [] # Q1, include +x, include +y
-        self.data2 = [] # Q2, exclude +y, include -x
-        self.data3 = [] # Q3, exclude -x, include -y
-        self.data4 = [] # Q4, exclude -y, exclude -x
+        self.data: typing.Dict[typing.Tuple(int, int), MapData.Element] = {}
         self.history = collections.deque(maxlen=5000)
     
-    def _which(self, x: int, y: int):
-        data = None
-        if x >= 0 and y >= 0:
-            data = self.data1
-        elif x < 0 and y >= 0:
-            x = -x
-            data = self.data2
-        elif x > 0 and y < 0:
-            y = -y
-            data = self.data4
-        else:
-            x, y = -x, -y
-            data = self.data3
-        return data, x, y
-
     def put(self, x: int, y: int, d: Element):
         self._appendHistory(MapData.History(x, y, self._put(x, y, d)))
 
     def _put(self, x: int, y: int, d: Element) -> Element:
         d.x, d.y = x, y
-        data, x, y = self._which(x, y)
-        while len(data) <= y:
-            data.append([])
-        while len(data[y]) <= x:
-            data[y].append(None)
-        old = data[y][x]
-        data[y][x] = d
+        old = (x, y) in self.data and self.data[(x, y)] or None
+        self.data[(x, y)] = d
         return old
 
     def get(self, x: int, y: int) -> Element:
-        data, x, y = self._which(x, y)
-        if len(data) <= y:
-            return None
-        if len(data[y]) <= x:
-            return None
-        return data[y][x]
+        return (x, y) in self.data and self.data[(x, y)] or None
        
     def delete(self, x: int, y: int):
         self._appendHistory(MapData.History(x, y, self._delete(x, y)))
 
     def _delete(self, x: int, y: int) -> Element:
-        data, x, y = self._which(x, y)
-        if len(data) <= y:
-            return None
-        if len(data[y]) <= x:
-            return None
-        old = data[y][x]
-        data[y][x] = None
+        old = (x, y) in self.data and self.data[(x, y)] or None
+        self.data[(x, y)] = None
         return old
     
     def _appendHistory(self, h):
@@ -142,7 +109,7 @@ class MapCell:
         
     def paint(self, p: QPainter): 
         if self.moving and self.parent.currentData != self.current:
-            blockSize = int(MapCell.Base * self.currentScale)
+            blockSize = self.parent._blocksize()
             p.drawRect(self.posx, self.posy, blockSize, blockSize)
         elif self.current:
             self.current.data._renderer.setFixedSize(self.w, self.h)
