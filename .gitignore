@@ -2,3 +2,4 @@ data
 *.pyc
 bus
 .DS_Store
+icon.db
