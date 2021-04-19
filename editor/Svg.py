@@ -1,6 +1,8 @@
+import json
 from PyQt5 import QtCore, QtSvg
 from PyQt5.QtGui import QColor, QFont, QFontMetrics, QPainter
 from PyQt5.QtWidgets import QListView, QTableWidget, QTableWidgetItem, QWidget 
+from urllib.parse import quote
 import os
 
 class SvgSource:
@@ -18,7 +20,7 @@ class SvgSource:
         self._w = self._h = 0 # override sizeHint
         SvgSource.Manager[self.svgId] = self
         
-    def overrideWidthHeight(self, w, h):
+    def overrideSize(self, w, h):
         self._w, self._h = w, h
         
     def width(self):
@@ -33,12 +35,38 @@ class SvgSource:
         self._renderer.render(p, flags=QWidget.RenderFlag.DrawChildren)
         p.translate(-x, -y)
         
-class SvgList(QTableWidget):
-    def __init__(self, parent, root) -> None:
-        super().__init__(parent=parent)
-        # self.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        item = QTableWidgetItem('zzz')
-        item.setFlags(item.flags() & ~QtCore.Qt.ItemFlag.ItemIsEditable)
-        self.setRowCount(10)
-        self.setColumnCount(2)
-        self.setItem(1,1,item)
+class SvgSearch:
+    def __init__(self, path: str) -> None:
+        self.path = path.strip("/")
+        with open(self.path + '/meta.json') as f:
+            data = json.load(f)
+
+        self.data = data
+        self.files = set()
+
+        for k in data:
+            for n in data[k]:
+                self.files.add(n)
+        
+    def search(self, q: str):
+        scores = {}
+        for p in q.lower().split(' '):
+            if not p in self.data:
+                continue
+            for c in self.data[p]:
+                if c in scores:
+                    scores[c] = scores[c] + 1
+                else:
+                    scores[c] = 1
+        c = []
+        for k in scores:
+            c.append((k, scores[k]))
+            
+        uq = quote(q).lower()
+        for f in self.files:
+            f: str = f.lower()
+            if f.count(uq) > 0:
+                c.append((f, 1e5))
+            
+        c = sorted(c, key=lambda x: x[1], reverse=True)
+        return list(map(lambda x: (x[0], self.path + "/" + x[0]), c))

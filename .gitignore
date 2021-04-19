@@ -6,3 +6,5 @@ icon.db
 build
 dist
 *.spec
+block
+icon*

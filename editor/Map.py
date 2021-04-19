@@ -14,20 +14,20 @@ def mod(x, y):
     return x - int(x/y) * y
 
 class Map(QWidget):
-    def __init__(self, parent):
+    def __init__(self, parent, sources: typing.List[SvgSource] = None):
         super().__init__(parent)
         
         self.data = MapData(self)
         self.scale = 2
 
-        sources: typing.List[SvgSource] = []
+        sources = sources or []
         for i in range(0, 10):
             sources.append(SvgSource(self, "id" + str(i), """
                 <svg height="48" width="48">
                     <text x="8" y="24" fill="red">{}</text>
                     <rect x="8" y="8" width="32" height="32" fill="transparent" stroke="#000"></rect>
                 </svg>""".format(i).encode('utf-8')))
-            sources[i].overrideWidthHeight(32, 32)
+            sources[i].overrideSize(32, 32)
             
         for i in range(0, 1000):
             l = int(random.random() * 15 + 10)
@@ -208,8 +208,20 @@ class Map(QWidget):
             self.hover.clear()
             self.dragger.reset()
             self.pan(0, 0)
+            
+        if a0.key() == QtCore.Qt.Key.Key_Home or a0.key() == QtCore.Qt.Key.Key_H:
+            self.center()
 
         return super().keyPressEvent(a0)
+    
+    def center(self):
+        r = self.data.bbox()
+        cx, cy = r.x() + r.width() // 2, r.y() + r.height() // 2
+        x, y = cx * self._blocksize(), cy * self._blocksize()
+        x = x + self.width() // 2
+        y = y + self.height() // 2
+        self.viewOrigin = [x, y]
+        self.pan(0, 0)
     
     def _toggleSvgBoxesMoving(self, v):
         for row in self.svgBoxes:

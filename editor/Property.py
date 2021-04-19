@@ -1,18 +1,26 @@
 import typing
+from PyQt5 import QtGui
 from PyQt5.QtWidgets import QComboBox, QHBoxLayout, QLabel, QLayout, QMainWindow, QSizePolicy, QSpinBox, QTextEdit, QVBoxLayout, QWidget
 
 from PyQt5 import QtCore
 from PyQt5.QtGui import QFontDatabase 
 
 class Property(QWidget):
+    def _title(self, t):
+        l = QLabel(t, self)
+        l.setStyleSheet("font-weight: bold")
+        return l 
+
     def __init__(self, parent: typing.Optional['QWidget']):
         super().__init__(parent=parent)
         self.box = QVBoxLayout(self)
         self.box.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
-
-        self.placeholder = QLabel('Text', self)
-        self.box.addWidget(self.placeholder)
         
+        self.box.addWidget(self._title('Type'))
+        self.svgId = QLabel('N/A', self)
+        self.box.addWidget(self.svgId)
+
+        self.box.addWidget(self._title('Text'))
         self.text = QTextEdit(self)
         self.text.textChanged.connect(self.textChanged)
         self.text.installEventFilter(self)
@@ -40,7 +48,7 @@ class Property(QWidget):
                 self.textSize.addItem(str(i))
         self.textSize.currentIndexChanged.connect(self.sizeChanged)
         self.textSize.setEditable(True)
-        self._addBiBoxInTextAttrBox(QLabel("Font Family"), self.textFont, QLabel("Font Size"), self.textSize)
+        self._addBiBoxInTextAttrBox(self._title("Font Family"), self.textFont, self._title("Font Size"), self.textSize)
         
         self.textAlign = QComboBox(self)
         self.textPlace = QComboBox(self)
@@ -52,7 +60,7 @@ class Property(QWidget):
             c.addItem('Right', 'r')
         self.textAlign.currentIndexChanged.connect(self.alignChanged)
         self.textPlace.currentIndexChanged.connect(self.placeChanged)
-        self._addBiBoxInTextAttrBox(QLabel("Alignment"), self.textAlign, QLabel("Placement"), self.textPlace)
+        self._addBiBoxInTextAttrBox(self._title("Alignment"), self.textAlign, self._title("Placement"), self.textPlace)
         
         self.textX = QSpinBox(self)
         self.textY = QSpinBox(self)
@@ -62,7 +70,7 @@ class Property(QWidget):
             c.setMaximum(1e5)
         self.textX.valueChanged.connect(lambda e: self.offsetChanged('x', e))
         self.textY.valueChanged.connect(lambda e: self.offsetChanged('y', e))
-        self._addBiBoxInTextAttrBox(QLabel("Offset X"), self.textX, QLabel("Offset Y"), self.textY)
+        self._addBiBoxInTextAttrBox(self._title("Offset X"), self.textX, self._title("Offset Y"), self.textY)
 
         self.box.addWidget(self.textAttr)
 
@@ -137,9 +145,11 @@ class Property(QWidget):
     def update(self):
         items = self.selection()
         if not items:
+            self.svgId.setText("N/A")
             return
         e = items[-1]
         self.updating = True
+        self.svgId.setText(e.data.svgId)
         self.text.setText(e.text)
         self.textFont.setEditText(e.textFont)
         self.textSize.setEditText(str(e.textSize))

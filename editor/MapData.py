@@ -1,4 +1,5 @@
 import collections
+import sys
 import json
 import struct
 import typing
@@ -85,6 +86,17 @@ class MapData:
 
     def get(self, x: int, y: int) -> Element:
         return (x, y) in self.data and self.data[(x, y)] or None
+    
+    def bbox(self) -> QRect:
+        maxx, maxy = -sys.maxsize, -sys.maxsize
+        minx, miny = sys.maxsize, sys.maxsize
+        for k in self.data:
+            (x, y) = k
+            maxx = max(maxx, x)
+            maxy = max(maxy, y)
+            minx = min(minx, x)
+            miny = min(miny, y)
+        return QRect(minx, miny, maxx - minx, maxy - miny)
        
     def delete(self, x: int, y: int):
         self._appendHistory(self._delete(x, y), x, y)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -10,22 +11,78 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf16"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/tidwall/gjson"
 	"go.etcd.io/bbolt"
 )
 
 func main() {
 	rand.Seed(time.Now().Unix())
 	db, _ := bbolt.Open("icon.db", 0777, nil)
-	db.View(func(tx *bbolt.Tx) error {
-		fmt.Println(tx.Bucket([]byte("meta")).Stats().KeyN)
-		return nil
-	})
 
-	return
+	if true {
+		zipFile, _ := os.Create("icon.zip")
+		defer zipFile.Close()
+
+		zipWriter := zip.NewWriter(zipFile)
+		defer zipWriter.Close()
+
+		db.View(func(tx *bbolt.Tx) error {
+			data := tx.Bucket([]byte("data"))
+			meta := tx.Bucket([]byte("meta"))
+
+			c := data.Cursor()
+			i := 0
+			cats := map[string][]string{}
+
+			for k, v := c.First(); k != nil; k, v = c.Next() {
+				metaV := meta.Get(k)
+				if len(metaV) == 0 {
+					panic(string(k))
+				}
+
+				m := map[string]string{}
+				json.Unmarshal(metaV, &m)
+
+				p := SplitByPunct(m["cat"])
+				p = append(p, SplitByPunct(m["desc"])...)
+				for _, p := range p {
+					p = strings.ToLower(p)
+					cats[p] = append(cats[p], string(k))
+				}
+
+				// fmt.Println(string(k), string(v))
+				v = bytes.TrimPrefix(v, []byte("\xef\xbb\xbf"))
+				v = bytes.Replace(v, []byte("iso-8859-1"), []byte("utf-8"), 1)
+				v = bytes.Replace(v, []byte("us-ascii"), []byte("utf-8"), 1)
+				v = []byte(strings.ToValidUTF8(string(v), ""))
+
+				if false {
+					idx := bytes.Index(v, []byte("<?"))
+					idx2 := bytes.Index(v, []byte("?>"))
+					if idx > -1 && idx2 > idx {
+						v = v[idx2+2:]
+					}
+				}
+
+				w, _ := zipWriter.Create(string(k))
+				w.Write(v)
+
+				if i++; i%100 == 0 {
+					fmt.Println(time.Now().Format("15:04:05"), "data cp", i)
+				}
+			}
+
+			buf, _ := json.Marshal(cats)
+			// ioutil.WriteFile("meta.json", buf, 0777)
+			w, _ := zipWriter.Create("meta.json")
+			w.Write(buf)
+			return nil
+		})
+		return
+	}
 
 	resp, err := http.Get("https://en.wikipedia.org/wiki/Template:Bsicon")
 	if err != nil {
@@ -174,83 +231,23 @@ func clean(in string) string {
 	return in
 }
 
-func likelyID(in string) bool {
-	c := 0
-	for _, r := range in {
-		if r >= 'A' && r <= 'Z' {
-			c++
-		}
-	}
-	return c > 1
-}
-
-func getAllTrains(code string) (map[string]Run, []Run) {
-	getter := func(d int) map[string]Run {
-		now := time.Now().UTC().Add(8*time.Hour).AddDate(0, 0, d).Format("2006-01-02")
-		u := fmt.Sprintf("https://kyfw.12306.cn/otn/czxx/query?train_start_date=%s&train_station_code=%s", now, code)
-		resp, _ := http.Get(u)
-		defer resp.Body.Close()
-		buf, _ := ioutil.ReadAll(resp.Body)
-		m := map[string]Run{}
-		for _, a := range gjson.GetBytes(buf, "data.data").Array() {
-			m[a.Get("train_no").Str] = Run{
-				Code:      a.Get("train_no").String(),
-				CodeHuman: a.Get("station_train_code").String(),
-				From:      a.Get("start_station_name").String(),
-				To:        a.Get("end_station_name").String(),
-				Date:      now,
+func SplitByPunct(in string) (parts []string) {
+	i := 0
+	runes := []rune(in)
+	for ii, r := range runes {
+		if unicode.IsPunct(r) || unicode.IsSpace(r) {
+			tmp := runes[i:ii]
+			if len(tmp) > 0 {
+				parts = append(parts, string(tmp))
 			}
-		}
-		return m
-	}
-	m := getter(1)
-	// for i := 2; i < 4; i++ {
-	// 	for k, v := range getter(i) {
-	// 		m[k] = v
-	// 	}
-	// }
-	f := make([]Run, 0, len(m))
-	for _, v := range m {
-		f = append(f, v)
-	}
-	return m, f
-}
-
-func (r *Run) FillPath() {
-	date := r.Date
-	u := fmt.Sprintf("https://kyfw.12306.cn/otn/czxx/queryByTrainNo?train_no=%s&from_station_telecode=%s&to_station_telecode=%s&depart_date="+date,
-		r.Code, telecode(r.From), telecode(r.To))
-	resp, _ := http.Get(u)
-	defer resp.Body.Close()
-	buf, _ := ioutil.ReadAll(resp.Body)
-	x := gjson.GetBytes(buf, "data.data").Array()
-	pt := make(Path, 0, len(x))
-	for i, p := range x {
-		if i == 0 {
-			pt = append(pt, Path1{
-				StationName:   p.Get("station_name").String(),
-				DepartureTime: parseTime(date, p.Get("start_time").String()),
-			})
-		} else if i == len(x)-1 {
-			pt = append(pt, Path1{
-				StationName: p.Get("station_name").String(),
-				ArrivalTime: parseTime(date, p.Get("arrive_time").String()),
-			})
-		} else {
-			pt = append(pt, Path1{
-				StationName:   p.Get("station_name").String(),
-				ArrivalTime:   parseTime(date, p.Get("arrive_time").String()),
-				DepartureTime: parseTime(date, p.Get("start_time").String()),
-			})
+			i = ii + 1
+		} else if ii == len(runes)-1 {
+			tmp := runes[i : ii+1]
+			if len(tmp) > 0 {
+				parts = append(parts, string(tmp))
+			}
+			break
 		}
 	}
-	r.Path = pt
-}
-
-type Run struct {
-	Date      string
-	Code      string
-	CodeHuman string
-	From, To  string
-	Path      Path
+	return parts
 }
