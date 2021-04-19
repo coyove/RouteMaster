@@ -3,3 +3,6 @@ data
 bus
 .DS_Store
 icon.db
+build
+dist
+*.spec

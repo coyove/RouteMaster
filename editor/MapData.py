@@ -1,27 +1,14 @@
 import collections
-import struct, json
+import json
+import struct
 import typing
 
-import PyQt5.QtSvg as QtSvg
 from PyQt5 import QtCore, QtGui
-from PyQt5.QtCore import QPoint, QRectF
 from PyQt5.QtGui import QColor, QImage, QOpenGLContext, QPainter, QPaintEvent
 from PyQt5.QtWidgets import QGraphicsEllipseItem, QWidget
 
+from Svg import SvgSource
 
-class SvgSource:
-    Manager = {}
-    
-    def get(id):
-        return id in SvgSource.Manager and SvgSource.Manager[id] or None
-    
-    def __init__(self, parent, id, svgData: bytes) -> None:
-        self.svgData = svgData
-        self.svgId = id
-        self._renderer = QtSvg.QSvgWidget(parent)
-        self._renderer.load(svgData)
-        self._renderer.setVisible(False)
-        SvgSource.Manager[self.svgId] = self
 
 class MapData:
     class Element:
@@ -112,10 +99,7 @@ class MapCell:
             blockSize = self.parent._blocksize()
             p.drawRect(self.posx, self.posy, blockSize, blockSize)
         elif self.current:
-            self.current.data._renderer.setFixedSize(self.w, self.h)
-            p.translate(self.x, self.y)
-            self.current.data._renderer.render(p, flags=QWidget.RenderFlag.DrawChildren)
-            p.translate(-self.x, -self.y)
+            self.current.data.paint(self.x, self.y, self.w, self.h, p)
         
     def loadResizeMove(self, data: MapData.Element, scale: float, x: int, y: int):
         self.current = data
@@ -123,8 +107,7 @@ class MapCell:
         # super().load(data.svgData)
         # svgSize = self.sizeHint()
         # w, h = int(svgSize.width() * scale), int(svgSize.height() * scale)
-        self.w = int(data.data._renderer.sizeHint().width() * scale)
-        self.h = int(data.data._renderer.sizeHint().height() * scale)
+        self.w, self.h = int(data.data.width() * scale), int(data.data.height() * scale)
         
         self.posx, self.posy = x, y
         self.x = int(x - (self.w - MapCell.Base * scale) / 2)

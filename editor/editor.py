@@ -1,5 +1,5 @@
 from typing import ValuesView
-from SvgList import SvgList
+from Svg import SvgList, SvgTextSource
 import math
 from PyQt5.QtWidgets import QApplication, QGraphicsScale, QMainWindow, QVBoxLayout, QWidget, QStatusBar, QLabel, QSplitter, qDrawBorderPixmap
 import PyQt5.QtSvg as QtSvg
@@ -26,6 +26,10 @@ class Map(QWidget):
                     <text x="8" y="24" fill="red">{}</text>
                     <rect x="8" y="8" width="32" height="32" fill="transparent" stroke="#000"></rect>
                 </svg>""".format(i).encode('utf-8')))
+            sources[i]._w = 32
+            sources[i]._h = 32
+        
+        sources.append(SvgTextSource(self, "hello"))
             
         for i in range(0, 1000):
             l = int(random.random() * 15 + 10)
@@ -126,15 +130,15 @@ class Map(QWidget):
         
     def findCellUnder(self, a0: QtGui.QMouseEvent, c: QtCore.QPoint = None):
         c = a0 and a0.pos() or c
-        blockSize = int(MapCell.Base * self.scale)
+        bs = self._blocksize()
         sx, sy = self.deltaxy()
-        ix = math.ceil((c.x() - sx) / blockSize) 
-        iy = math.ceil((c.y() - sy) / blockSize)
-        pt = QtCore.QPoint(int((c.x() - sx) / blockSize) * blockSize + sx, int((c.y() - sy) / blockSize) * blockSize + sy)
-        x_ = ((c.x() - self.viewOrigin[0]) / blockSize)
-        y_ = ((c.y() - self.viewOrigin[1]) / blockSize)
+        ix = math.ceil((c.x() - sx) / bs) # xy of cell
+        iy = math.ceil((c.y() - sy) / bs)
+        pt = QtCore.QPoint(int((c.x() - sx) / bs) * bs + sx, int((c.y() - sy) / bs) * bs + sy)
+        x_ = (c.x() - self.viewOrigin[0]) / bs # xy of data
+        y_ = (c.y() - self.viewOrigin[1]) / bs
         x, y = math.ceil(x_), math.ceil(y_)
-        if x_ == x or y_ == y:
+        if x_ == x or y_ == y: # special case: cursor on edge, no cell found
             return None, None, pt
         d = self.data.get(x, y) or MapData.Element(x = x, y = y)
         if iy >= len(self.svgBoxes) or ix >= len(self.svgBoxes[iy]):
@@ -172,7 +176,8 @@ class Map(QWidget):
             
         if ctrl and a0.key() == QtCore.Qt.Key.Key_V:
             c = []
-            for s in QtGui.QGuiApplication.clipboard().text().split('{}'):
+            text = QtGui.QGuiApplication.clipboard().text()
+            for s in text.split('{}'):
                 d = MapData.Element.unpack(s)
                 if d:
                     c.append(d)
@@ -332,9 +337,9 @@ class Window(QMainWindow):
         splitter.setStretchFactor(1, 2)
         splitter.setSizes([100, 100])
         vbox.addWidget(splitter)
-
+        
         self.show()
-
+        
 app = QApplication([])
 win = Window()
 app.exec_()
