@@ -7,6 +7,6 @@ require (
 	github.com/fogleman/gg v1.3.0
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/tidwall/gjson v1.7.4
-	go.etcd.io/bbolt v1.3.5 // indirect
+	go.etcd.io/bbolt v1.3.5
 	golang.org/x/image v0.0.0-20210220032944-ac19c3e999fb // indirect
 )

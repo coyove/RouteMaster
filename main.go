@@ -10,22 +10,23 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode/utf16"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/tidwall/gjson"
 	"go.etcd.io/bbolt"
 )
 
-func updateMeta(f func(map[string]map[string]string)) {
-	m := map[string]map[string]string{}
-	buf, _ := ioutil.ReadFile("block/meta.json")
-	json.Unmarshal(buf, &m)
-	f(m)
-	buf, _ = json.Marshal(m)
-	ioutil.WriteFile("block/meta.json", buf, 0777)
-}
-
 func main() {
+	rand.Seed(time.Now().Unix())
+	db, _ := bbolt.Open("icon.db", 0777, nil)
+	db.View(func(tx *bbolt.Tx) error {
+		fmt.Println(tx.Bucket([]byte("meta")).Stats().KeyN)
+		return nil
+	})
+
+	return
+
 	resp, err := http.Get("https://en.wikipedia.org/wiki/Template:Bsicon")
 	if err != nil {
 	}
@@ -41,9 +42,6 @@ func main() {
 			links = append(links, [2]string{a, clean(sel.Text())})
 		}
 	})
-
-	rand.Seed(time.Now().Unix())
-	db, _ := bbolt.Open("icon.db", 0777, nil)
 
 	for _, l := range links {
 		func(p [2]string) {
@@ -125,8 +123,16 @@ func main() {
 						defer resp.Body.Close()
 
 						data, _ = ioutil.ReadAll(resp.Body)
+						if bytes.HasPrefix(data, []byte{254, 255}) {
+							x := make([]uint16, len(data)/2)
+							for i := 2; i < len(data); i += 2 {
+								x = append(x, uint16(data[i])*16+uint16(data[i+1]))
+							}
+							tmp := utf16.Decode(x)
+							data = []byte(string(tmp))
+						}
 						if !bytes.Contains(data, []byte("<svg")) {
-							fmt.Println("\t\terror")
+							fmt.Println("\t\terror", data[:10], string(data))
 							return nil
 						}
 						fmt.Println("\t\t", len(data))

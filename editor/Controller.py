@@ -43,6 +43,7 @@ class Selection:
         self.labels.append(label)
         self.dedup[id(data)] = label
         self.parent.selectionEvent(Selection.Add, data)
+        self.parent.findMainWin().propertyPanel.update()
         
     def delSelection(self, data: MapData.Element):
         if not id(data) in self.dedup:
@@ -50,6 +51,7 @@ class Selection:
         x = self.dedup[id(data)]
         del self.dedup[id(data)]
         self.labels.remove(x)
+        self.parent.findMainWin().propertyPanel.update()
         
     def moveIncr(self, x, y, size):
         for l in self.labels:
@@ -74,6 +76,7 @@ class Selection:
         self.labels = self.labels[:0]
         self.dedup = {}
         self.parent.selectionEvent(Selection.Clear, None)
+        self.parent.findMainWin().propertyPanel.update()
         
     def status(self):
         return "{}".format(len(self.labels))
@@ -114,11 +117,11 @@ class HoverController:
 
 class DragController:
     Size = 12
+    pen = QPen(QColor(100, 120, 120))
+    pen.setWidth(3)
 
     def __init__(self, parent) -> None:
         self.parent = parent
-        self.pen = QPen(QColor(100, 120, 120))
-        self.pen.setWidth(3)
         self.reset()
         
     def reset(self):
@@ -156,23 +159,23 @@ class DragController:
     def paint(self, p: QPainter):
         if not self.started:
             return
-        
         if not self.visible:
             return
+        DragController._paint(self.startx, self.starty, self.dragtox, self.dragtoy, p)
         
+    def _paint(startx, starty, dragtox, dragtoy, p: QPainter):
         p.save()
-        p.setPen(self.pen)
-        p.drawLine(self.startx, self.starty, self.dragtox, self.dragtoy)
+        p.setPen(DragController.pen)
+        p.drawLine(startx, starty, dragtox, dragtoy)
 
         p.setPen(QPen(QColor(0,0,0,0)))
         p.setBrush(QColor(100, 120, 120, 128))
         offset = 4
         size = DragController.Size + offset
-        p.drawEllipse(self.startx - size / 2, self.starty - size / 2, size, size)
-        p.drawEllipse(self.dragtox - size / 2, self.dragtoy - size / 2, size, size)
+        p.drawEllipse(startx - size / 2, starty - size / 2, size, size)
+        p.drawEllipse(dragtox - size / 2, dragtoy - size / 2, size, size)
 
         p.setBrush(QColor(100, 120, 120))
-        p.drawEllipse(self.startx - DragController.Size / 2, self.starty - DragController.Size / 2, DragController.Size, DragController.Size)
-        p.drawEllipse(self.dragtox - DragController.Size / 2, self.dragtoy - DragController.Size / 2, DragController.Size, DragController.Size)
-
+        p.drawEllipse(startx - DragController.Size / 2, starty - DragController.Size / 2, DragController.Size, DragController.Size)
+        p.drawEllipse(dragtox - DragController.Size / 2, dragtoy - DragController.Size / 2, DragController.Size, DragController.Size)
         p.restore()
