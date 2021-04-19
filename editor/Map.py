@@ -191,12 +191,7 @@ class Map(QWidget):
                             c and "Invalid blocks have been filtered ({} remain)".format(len(c)) or "No valid blocks to paste").exec_()
 
             if len(c):
-                self.data.begin()
-                self.selector.clear()
-                self.hover.hold(c)
-                self.dragger.start(0, 0, QtCore.QPoint(0, 0))
-                self.dragger.visible = False
-                self.pressHoldSel = True
+                self.ghostHold(c)
                 
         if ctrl and a0.key() == QtCore.Qt.Key.Key_Z:
             self.data.rewind()
@@ -213,6 +208,14 @@ class Map(QWidget):
             self.center()
 
         return super().keyPressEvent(a0)
+    
+    def ghostHold(self, c: typing.List[MapData.Element]):
+        self.data.begin()
+        self.selector.clear()
+        self.hover.hold(c)
+        self.dragger.start(0, 0, QtCore.QPoint(0, 0))
+        self.dragger.visible = False
+        self.pressHoldSel = True
     
     def center(self):
         r = self.data.bbox()

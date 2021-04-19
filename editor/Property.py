@@ -80,10 +80,10 @@ class Property(QWidget):
         
         self.updating = False
         
-    def _genVBox(self, w1, w2):
-        placeAttr = QWidget(self)
+    def _genVBox(p, w1, w2, m=0):
+        placeAttr = QWidget(p)
         placeAttrBox = QVBoxLayout()
-        placeAttrBox.setContentsMargins(0, 0, 0, 0)
+        placeAttrBox.setContentsMargins(m, m, m, m)
         placeAttr.setLayout(placeAttrBox)
         placeAttrBox.addWidget(w1)
         placeAttrBox.addWidget(w2)
@@ -99,8 +99,8 @@ class Property(QWidget):
         placeAttrBox = QHBoxLayout()
         placeAttrBox.setContentsMargins(0, 0, 0, 0)
         placeAttr.setLayout(placeAttrBox)
-        placeAttrBox.addWidget(self._genVBox(t1, w1))
-        placeAttrBox.addWidget(self._genVBox(t2, w2))
+        placeAttrBox.addWidget(Property._genVBox(self, t1, w1))
+        placeAttrBox.addWidget(Property._genVBox(self, t2, w2))
         self.textAttrBox.addWidget(placeAttr)
         
     def textChanged(self):
