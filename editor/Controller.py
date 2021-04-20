@@ -33,7 +33,7 @@ class Selection:
             if x or y: # paint select-n-drag blocks if presented
                 p.fillRect(l.x + x, l.y + y, l.size, l.size, QColor(255, 255, 0, l.oddeven() and 90 or 45))
         
-    def addSelection(self, data: MapData.Element, pos: QtCore.QPoint, size):
+    def addSelection(self, data: MapData.Element, pos: QtCore.QPoint, size, propertyPanel = True):
         if not data.data:
             return
         if id(data) in self.dedup:
@@ -43,7 +43,8 @@ class Selection:
         self.labels.append(label)
         self.dedup[id(data)] = label
         self.parent.selectionEvent(Selection.Add, data)
-        self.parent.findMainWin().propertyPanel.update()
+        if propertyPanel:
+            self.parent.findMainWin().propertyPanel.update()
         
     def delSelection(self, data: MapData.Element):
         if not id(data) in self.dedup:

@@ -193,10 +193,24 @@ class Map(QWidget):
             if len(c):
                 self.ghostHold(c)
                 
-        if ctrl and a0.key() == QtCore.Qt.Key.Key_Z:
-            self.data.rewind()
+        if ctrl and (a0.key() == QtCore.Qt.Key.Key_Z or a0.key() == QtCore.Qt.Key.Key_Y):
+            if a0.key() == QtCore.Qt.Key.Key_Z:
+                self.data.rewind()
+            else:
+                self.data.forward()
             self.selector.clear()
             self.pan(0, 0)
+            
+        if ctrl and a0.key() == QtCore.Qt.Key.Key_A:
+            self.selector.clear()
+            for k in self.data.data:
+                (x, y), el = k, self.data.data[k]
+                self.selector.addSelection(el, QtCore.QPoint(
+                    (x - 1) * self._blocksize() + self.viewOrigin[0],
+                    (y - 1) * self._blocksize() + self.viewOrigin[1]),
+                    self._blocksize(), propertyPanel=False)
+            self.findMainWin().propertyPanel.update()
+            self.repaint()
             
         if a0.key() == QtCore.Qt.Key.Key_Escape:
             self.selector.clear()

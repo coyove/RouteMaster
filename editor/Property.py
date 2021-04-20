@@ -1,6 +1,6 @@
 import typing
 from PyQt5 import QtGui
-from PyQt5.QtWidgets import QComboBox, QHBoxLayout, QLabel, QLayout, QMainWindow, QSizePolicy, QSpinBox, QTextEdit, QVBoxLayout, QWidget
+from PyQt5.QtWidgets import QComboBox, QHBoxLayout, QLabel, QLayout, QMainWindow, QSizePolicy, QSpinBox, QTextEdit, QVBoxLayout, QWidget, qDrawWinButton
 
 from PyQt5 import QtCore
 from PyQt5.QtGui import QFontDatabase 
@@ -13,23 +13,21 @@ class Property(QWidget):
 
     def __init__(self, parent: typing.Optional['QWidget']):
         super().__init__(parent=parent)
-        self.box = QVBoxLayout(self)
-        self.box.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
+        # self.box = QVBoxLayout(self)
+        # self.box.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
+        self.textAttr = QWidget(self)
+        self.textAttrBox = QVBoxLayout()
+        self.textAttr.setLayout(self.textAttrBox)
         
-        self.box.addWidget(self._title('Type'))
         self.svgId = QLabel('N/A', self)
-        self.box.addWidget(self.svgId)
+        self.historyStatus = QLabel('N/A', self)
+        self._addBiBoxInTextAttrBox(self._title('Type'), self.svgId, self._title("Status"), self.historyStatus)
 
-        self.box.addWidget(self._title('Text'))
+        self.textAttrBox.addWidget(self._title('Text'))
         self.text = QTextEdit(self)
         self.text.textChanged.connect(self.textChanged)
         self.text.installEventFilter(self)
-        self.box.addWidget(self.text)
-
-        self.textAttr = QWidget(self)
-        self.textAttrBox = QVBoxLayout()
-        self.textAttrBox.setContentsMargins(0 ,0, 0, 0)
-        self.textAttr.setLayout(self.textAttrBox)
+        self.textAttrBox.addWidget(self.text)
         
         self.textFont = QComboBox(self)
         fontFamilies = QFontDatabase()
@@ -72,9 +70,7 @@ class Property(QWidget):
         self.textY.valueChanged.connect(lambda e: self.offsetChanged('y', e))
         self._addBiBoxInTextAttrBox(self._title("Offset X"), self.textX, self._title("Offset Y"), self.textY)
 
-        self.box.addWidget(self.textAttr)
-
-        self.setLayout(self.box)
+        self.setLayout(self.textAttrBox)
         self.show()
         self.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.MinimumExpanding)
         
@@ -112,8 +108,9 @@ class Property(QWidget):
         mainData = self.findMainWin().mapview.data
         mainData.begin()
         for x in self.selection():
-            mainData._appendHistory(x)
+            old = x.dup()
             f(x)
+            mainData._appendHistory(old, x)
         self.findMainWin().mapview.pan(0, 0)
         
     def fontChanged(self, e):
@@ -143,10 +140,20 @@ class Property(QWidget):
         return list(map(lambda l: l.data, self.findMainWin().mapview.selector.labels))
     
     def update(self):
+        data = self.findMainWin().mapview.data
+        self.historyStatus.setText('{}@{}'.format(data.historyCap, len(data.history)))
+        for k in self.__dict__:
+            w = self.__dict__[k]
+            if isinstance(w, QWidget):
+                w.setEnabled(False)
         items = self.selection()
         if not items:
             self.svgId.setText("N/A")
             return
+        for k in self.__dict__:
+            w = self.__dict__[k]
+            if isinstance(w, QWidget):
+                w.setEnabled(True)
         e = items[-1]
         self.updating = True
         self.svgId.setText(e.data.svgId)

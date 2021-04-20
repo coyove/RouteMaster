@@ -61,6 +61,7 @@ class Window(QMainWindow):
         splitter.setSizes([100, 100])
         vbox.addWidget(splitter, 255)
 
+        self.propertyPanel.update()
         self.show()
         
     def updateSearches(self):

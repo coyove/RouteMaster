@@ -1,4 +1,5 @@
 import collections
+from math import trunc
 import sys
 import json
 import copy
@@ -81,10 +82,11 @@ class MapData:
     def __init__(self, parent) -> None:
         self.parent = parent
         self.data: typing.Dict[typing.Tuple(int, int), MapData.Element] = {}
-        self.history = collections.deque(maxlen=5000)
+        self.history = []
+        self.historyCap = 0
     
     def put(self, x: int, y: int, d: Element):
-        self._appendHistory(self._put(x, y, d), x, y)
+        self._appendHistory(self._put(x, y, d), d, x, y)
 
     def _put(self, x: int, y: int, d: Element) -> Element:
         d.x, d.y = x, y
@@ -107,36 +109,56 @@ class MapData:
         return QRect(minx, miny, maxx - minx, maxy - miny)
        
     def delete(self, x: int, y: int):
-        self._appendHistory(self._delete(x, y), x, y)
+        self._appendHistory(self._delete(x, y), None, x, y)
 
     def _delete(self, x: int, y: int) -> Element:
         old = (x, y) in self.data and self.data[(x, y)] or None
-        self.data[(x, y)] = None
+        del self.data[(x, y)]
         return old
     
-    def _appendHistory(self, h: Element, delx = 0, dely = 0):
-        if h is None:
-            self.history.append('delete:{}:{}'.format(delx, dely))
-        else:
-            self.history.append(h.pack())
+    def _appendHistory(self, h: Element, rev: Element, delx = 0, dely = 0):
+        hs = h is None and 'delete:{}:{}'.format(delx, dely) or h.pack() # rewind
+        revs = rev is None and 'delete:{}:{}'.format(delx, dely) or rev.pack() # forward
+        self.history = self.history[:self.historyCap]
+        self.history.append((hs, revs))
+        self.historyCap = self.historyCap + 1
     
     def begin(self):
         if len(self.history) and self.history[-1] == "null": # no conjucated Nones
             return
+        self.history = self.history[:self.historyCap]
         self.history.append("null")
+        self.historyCap = self.historyCap + 1
+        
+    def forward(self):
+        metNull = False
+        while self.historyCap < len(self.history):
+            h = self.history[self.historyCap]
+            if h == 'null':
+                if metNull:
+                    break
+                metNull = True
+            self.historyCap = self.historyCap + 1
+            if h != 'null':
+                self._play(h[1])
+        self.parent.findMainWin().propertyPanel.update()
         
     def rewind(self):
-        while len(self.history):
-            h: str = self.history.pop()
+        while self.historyCap > 0:
+            h = self.history[self.historyCap - 1]
+            self.historyCap = self.historyCap - 1
             if h == 'null':
                 break
-            if h.startswith('delete:'):
-                xy = h[7:].split(':')
-                self._delete(int(xy[0]), int(xy[1]))
-            else:
-                d = MapData.Element.unpack(h)
-                self._put(d.x, d.y, d)
+            self._play(h[0])
         self.parent.findMainWin().propertyPanel.update()
+        
+    def _play(self, h: str):
+        if h.startswith('delete:'):
+            xy = h[7:].split(':')
+            self._delete(int(xy[0]), int(xy[1]))
+        else:
+            d = MapData.Element.unpack(h)
+            self._put(d.x, d.y, d)
 
 class MapCell:
     Base = 32

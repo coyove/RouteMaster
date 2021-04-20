@@ -7,6 +7,7 @@ from PyQt5 import QtCore, QtSvg
 from PyQt5.QtGui import QColor, QFont, QFontMetrics, QPainter
 from PyQt5.QtWidgets import QListView, QMainWindow, QPushButton, QTableWidget, QTableWidgetItem, QToolBar, QWidget 
 from urllib.parse import quote, unquote
+from Common import BS
 import os
 
 class SvgSource:
@@ -94,7 +95,7 @@ class SvgBar(QWidget):
     def mousePressEvent(self, a0: QtGui.QMouseEvent) -> None:
         self.currentHover = a0.x() // SvgBar.size
         if self.currentHover < len(self.sources):
-            self.findMainWin().ghostHold(self.sources[self.currentHover].dupWithSize(32, 32))
+            self.findMainWin().ghostHold(self.sources[self.currentHover].dupWithSize(BS, BS))
         self.repaint()
         return super().mousePressEvent(a0)
     
