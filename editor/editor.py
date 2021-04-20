@@ -45,7 +45,8 @@ class Window(QMainWindow):
 
         self.searchBox = QLineEdit(self)
         self.searchBox.setPlaceholderText('Search blocks')
-        self.searchBox.returnPressed.connect(self.searchBlocks)
+        self.searchBox.textChanged.connect(self.updateSearches)
+        # self.searchBox.returnPressed.connect(self.searchBlocks)
         self.searchResults = SvgBar(self)
         vbox.addWidget(Property._genVBox(self, self.searchBox, self.searchResults, 8))
 
@@ -62,12 +63,14 @@ class Window(QMainWindow):
 
         self.show()
         
-    def searchBlocks(self):
+    def updateSearches(self):
         results = self.searcher.search(self.searchBox.text())
         if not results:
             return
-        a = results[0]
-        self.mapview.ghostHold([MapData.Element(SvgSource(self, a[0], a[1], 32, 32))])
+        self.searchResults.update(results)
+        
+    def ghostHold(self, s):
+        self.mapview.ghostHold([MapData.Element(s)])
 
 app = QApplication([])
 win = Window()

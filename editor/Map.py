@@ -4,7 +4,7 @@ import typing
 
 import PyQt5.QtGui as QtGui
 from PyQt5 import QtCore
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QMessageBox, QWidget)
+from PyQt5.QtWidgets import (QApplication, QLineEdit, QMainWindow, QMessageBox, QWidget)
 
 from Controller import DragController, HoverController, Selection
 from MapData import MapCell, MapData, SvgSource
@@ -203,9 +203,15 @@ class Map(QWidget):
             self.hover.clear()
             self.dragger.reset()
             self.pan(0, 0)
+            self.findMainWin().searchResults.clearSelection()
             
         if a0.key() == QtCore.Qt.Key.Key_Home or a0.key() == QtCore.Qt.Key.Key_H:
             self.center()
+            
+        if a0.key() == QtCore.Qt.Key.Key_Space:
+            edit: QLineEdit = self.findMainWin().searchBox
+            edit.setFocus()
+            edit.selectAll()
 
         return super().keyPressEvent(a0)
     
@@ -243,9 +249,15 @@ class Map(QWidget):
             if len(self.svgBoxes) * len(self.svgBoxes[0]) > 1600:
                 self._toggleSvgBoxesMoving(True)
         elif len(self.hover.labels) > 0:
+            old = self.hover.labels
             self.hover.end()
             self.pressHoldSel = False
+            self.dragger.reset()
             self.pan(0, 0)
+            if a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier:
+                self.ghostHold([x.dup() for x in old])
+            else:
+                self.findMainWin().searchResults.clearSelection()
         else:
             self.pressPos = None
             self.pressHoldSel = True

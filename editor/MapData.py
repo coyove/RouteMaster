@@ -1,7 +1,7 @@
 import collections
 import sys
 import json
-import struct
+import copy
 import typing
 
 from PyQt5 import QtCore
@@ -39,6 +39,14 @@ class MapData:
         
         def set(self, k, v):
             return setattr(self, k, v)
+        
+        def dup(self):
+            tmp = self.data
+            self.data = None
+            obj = copy.deepcopy(self)
+            self.data = tmp
+            obj.data = tmp
+            return obj
         
         def pack(self):
             return json.dumps({

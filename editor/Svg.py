@@ -1,10 +1,12 @@
 import json
+import math
+import typing
 
 from PyQt5 import QtGui
 from PyQt5 import QtCore, QtSvg
 from PyQt5.QtGui import QColor, QFont, QFontMetrics, QPainter
-from PyQt5.QtWidgets import QListView, QPushButton, QTableWidget, QTableWidgetItem, QToolBar, QWidget 
-from urllib.parse import quote
+from PyQt5.QtWidgets import QListView, QMainWindow, QPushButton, QTableWidget, QTableWidgetItem, QToolBar, QWidget 
+from urllib.parse import quote, unquote
 import os
 
 class SvgSource:
@@ -21,6 +23,9 @@ class SvgSource:
         self._renderer.setVisible(False)
         self._w, self._h = w, h
         SvgSource.Manager[self.svgId] = self
+        
+    def dupWithSize(self, w, h):
+        return SvgSource(self._renderer.parent(), self.svgId, self.svgData, w, h)
         
     def overrideSize(self, w, h):
         self._w, self._h = w, h
@@ -43,24 +48,85 @@ class SvgBar(QWidget):
     def __init__(self, parent):
         super().__init__(parent)
         # self.setStyleSheet("background: white")
-        self.setFixedHeight(SvgBar.size)
-        self.setContentsMargins(0, 0, 0, 0)
-        self.left = QPushButton("<", self)
-        self.right = QPushButton(">", self)
-        self.svgBoxes = []
-
+        self.setFixedHeight(SvgBar.size * 1.5)
+        self.sources = []
+        self.setMouseTracking(True)
+        self.update([])
+    
+    def cells(self):
+        return self.width() // SvgBar.size
+    
+    def findMainWin(self):
+        p = self.parent()
+        while not isinstance(p, QMainWindow):
+            p = p.parent()
+        return p
+        
+    def update(self, files):
+        self.files = files
+        self.page = 0
+        self.currentHover = -1
+        self.refresh()
+        
     def resizeEvent(self, a0: QtGui.QResizeEvent) -> None:
-        size = SvgBar.size
-        self.left.setFixedSize(size / 2, size)
-        self.left.move(0, 0)
-        self.right.setFixedSize(size / 2, size)
-        self.right.move(self.width() - size / 2, 0)
+        self.refresh()
         return super().resizeEvent(a0)
+
+    def paintEvent(self, a0: QtGui.QPaintEvent) -> None:
+        p = QPainter(self)
+        p.fillRect(0, 0, self.width(), self.height(), QColor(255 ,255, 255))
+        for i in range(len(self.sources)):
+            x = i * SvgBar.size
+            s: SvgSource = self.sources[i]
+            m = 8
+            s.paint(x + m, m, SvgBar.size - m*2, SvgBar.size - m*2, p)
+            p.drawRect(x + m, m, SvgBar.size - m*2, SvgBar.size - m*2)
+            opt = QtGui.QTextOption(QtCore.Qt.AlignmentFlag.AlignCenter)
+            opt.setWrapMode(QtGui.QTextOption.WrapMode.WrapAnywhere)
+            p.save()
+            if i == self.currentHover:
+                p.fillRect(x, 0, SvgBar.size, SvgBar.size * 1.5, QColor(0, 0, 0, 40))
+            p.drawText(QtCore.QRectF(x + 4, SvgBar.size, SvgBar.size - 8, SvgBar.size / 2), unquote(s.svgId.replace('bsicon_', '').replace('.svg', '')), option=opt)
+            p.restore()
+        p.end()
+        return super().paintEvent(a0)
+    
+    def mousePressEvent(self, a0: QtGui.QMouseEvent) -> None:
+        self.currentHover = a0.x() // SvgBar.size
+        if self.currentHover < len(self.sources):
+            self.findMainWin().ghostHold(self.sources[self.currentHover].dupWithSize(32, 32))
+        self.repaint()
+        return super().mousePressEvent(a0)
+    
+    def mouseReleaseEvent(self, a0: QtGui.QMouseEvent) -> None:
+        self.repaint()
+        return super().mouseReleaseEvent(a0)
+    
+    def clearSelection(self):
+        self.currentHover = -1
+        self.repaint()
+    
+    def wheelEvent(self, a0: QtGui.QWheelEvent) -> None:
+        self.currentHover = -1
+        if a0.angleDelta().y() <= 0:
+            self.page = min(self.page + self.cells() // 3, max(0, len(self.files) - self.cells() // 2))
+        else:
+            self.page = max(self.page - self.cells() // 3, 0)
+        self.refresh()
+        return super().wheelEvent(a0)
+    
+    def refresh(self):
+        self.sources = self.sources[:0]
+        for i in range(self.page, self.page + self.cells()):
+            if i >= len(self.files):
+                break
+            self.sources.append(SvgSource(self, self.files[i][0], self.files[i][1]))
+        self.repaint()
         
 class SvgSearch:
     def __init__(self, path: str) -> None:
         self.path = path.strip("/")
-        with open(self.path + '/meta.json') as f:
+        with open(self.path + '/meta.json', 'rb') as f:
             data = json.load(f)
 
         self.data = data
@@ -72,9 +138,6 @@ class SvgSearch:
         
     def search(self, q: str):
         q = q.lower()
-        test = quote(q) + ".svg"
-        if test in self.files:
-            return [(test, self.path + "/" + test)]
 
         scores = {}
         for p in q.split(' '):
@@ -89,11 +152,15 @@ class SvgSearch:
         for k in scores:
             c.append((k, scores[k]))
             
+        test = "bsicon_" + quote(q) + ".svg"
+        if test in self.files:
+            c.append((test, 1e8))
+            
         uq = quote(q).lower()
         for f in self.files:
             f: str = f
             if f.count(uq) > 0:
-                c.append((f, 1e5))
+                c.append((f, 1e3 * (1000 - len(f))))
             
-        c = sorted(c, key=lambda x: x[1], reverse=True)
+        c = sorted(c, key=lambda x: (x[1], x[0]), reverse=True)
         return list(map(lambda x: (x[0], self.path + "/" + x[0]), c))
