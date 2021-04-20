@@ -1,3 +1,4 @@
+from Svg import SvgSource
 from math import trunc
 import typing
 from warnings import simplefilter
@@ -31,10 +32,11 @@ class Selection:
         for l in self.labels:
             p.fillRect(l.x, l.y, l.size, l.size, QColor(255, 255, 0, l.oddeven() and 135 or 90))
             if x or y: # paint select-n-drag blocks if presented
-                p.fillRect(l.x + x, l.y + y, l.size, l.size, QColor(255, 255, 0, l.oddeven() and 90 or 45))
+                el: MapData.Element = l.data
+                el.src.paint(l.x + x, l.y + y, l.size, l.size, p, ghost=True)
         
     def addSelection(self, data: MapData.Element, pos: QtCore.QPoint, size, propertyPanel = True):
-        if not data.data:
+        if not data.src:
             return
         if id(data) in self.dedup:
             return
@@ -85,12 +87,12 @@ class Selection:
 class HoverController:
     def __init__(self, parent) -> None:
         self.parent = parent
-        self.labels: typing.List[Selection.Block] = []
+        self.labels: typing.List[MapData.Element] = []
         
     def clear(self):
         self.labels = self.labels[:0]
         
-    def hold(self, data: typing.List[Selection.Block]):
+    def hold(self, data: typing.List[MapData.Element]):
         self.labels = data
         
     def paint(self, p: QPainter):
@@ -98,18 +100,25 @@ class HoverController:
         bs = self.parent._blocksize()
         x, y = d.dragtonorm.x(), d.dragtonorm.y()
         for l in self.labels:
-            p.fillRect((l.x - self.labels[0].x ) * bs + x, (l.y - self.labels[0].y) * bs + y, bs, bs, QColor(100, 120, 120, 45))
+            el: MapData.Element = l
+            # p.fillRect((l.x - self.labels[0].x ) * bs + x, (l.y - self.labels[0].y) * bs + y, bs, bs, QColor(100, 120, 120, 45))
+            el.src.paint((l.x - self.labels[0].x ) * bs + x, (l.y - self.labels[0].y) * bs + y, bs, bs, p, ghost=True)
+            for c in el.cascades:
+                c.paint((l.x - self.labels[0].x ) * bs + x, (l.y - self.labels[0].y) * bs + y, bs, bs, p, ghost=True)
     
-    def end(self):
+    def end(self, cascade):
         if len(self.labels) == 0:
             return
         d: MapData = self.parent.data
         d.begin()
 
         dd: DragController = self.parent.dragger
-        d1, _, _ = dd.parent.findCellUnder(None, QtCore.QPoint(dd.dragtox, dd.dragtoy))
-
-        if d1:
+        d1, cell, _ = dd.parent.findCellUnder(None, QtCore.QPoint(dd.dragtox, dd.dragtoy))
+        cell: MapCell
+        
+        if cascade and cell and d1 and len(self.labels) == 1:
+            cell.current.cascades.append(self.labels[0].src)
+        elif d1:
             x, y = self.labels[0].x, self.labels[0].y
             for l in self.labels:
                 d.put(l.x - x + d1.x, l.y - y + d1.y, l)

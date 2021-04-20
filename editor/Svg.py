@@ -1,4 +1,6 @@
+from Parser import parseBS
 import json
+import re
 import math
 import typing
 
@@ -9,12 +11,95 @@ from PyQt5.QtWidgets import QListView, QMainWindow, QPushButton, QTableWidget, Q
 from urllib.parse import quote, unquote
 from Common import BS
 import os
+ 
+class SvgSearch:
+    def __init__(self, path: str) -> None:
+        self.path = path.strip("/")
+        with open(self.path + '/meta.json', 'rb') as f:
+            data = json.load(f)
+
+        self.data = data
+        self.files = {}
+
+        for k in data:
+            for n in data[k]:
+                self.files[n.lower()] = n
+                
+    def guess(self, s: str):
+        p = "bsicon_" + s.lower() + ".svg"
+        if p in self.files:
+            return self.files[p], self.fullpath(self.files[p])
+        return "", ""
+                
+    def fullpath(self, id: str):
+        return self.path + "/" + id
+        
+    def search(self, q: str):
+        q = q.lower()
+
+        scores = {}
+        for p in q.split(' '):
+            if not p in self.data:
+                continue
+            for c in self.data[p]:
+                if c in scores:
+                    scores[c] = scores[c] + 1
+                else:
+                    scores[c] = 1
+        c = []
+        for k in scores:
+            c.append((k, scores[k]))
+            
+        test = "bsicon_" + quote(q) + ".svg"
+        if test in self.files:
+            c.append((self.files[test], 1e8))
+            
+        uq = quote(q).lower()
+        for f in self.files:
+            f: str = f
+            if f.count(uq) > 0:
+                c.append((self.files[f], 1e3 * (1000 - len(f))))
+            
+        c = sorted(c, key=lambda x: (x[1], x[0]), reverse=True)
+        return list(map(lambda x: (x[0], self.path + "/" + x[0]), c))
+
 
 class SvgSource:
     Manager = {}
+    Search: SvgSearch = None
     
     def get(id):
         return id in SvgSource.Manager and SvgSource.Manager[id] or None
+    
+    def getcreate(parent, id, fn, w, h):
+        if id in SvgSource.Manager:
+            return SvgSource.Manager[id]
+        return SvgSource(parent, id, fn, w, h)
+    
+    _rotateStepper = 0
+    def tryRotate(id: str, q=False, c1234=False):
+        def check(fn):
+            # print(fn)
+            return fn.lower() in SvgSource.Search.files and fn or None
+
+        id = id.removesuffix('.svg')
+        if q:
+            if id.endswith('q'):
+                return check(id[:-1] + ".svg")
+            return check(id + "q.svg")
+        
+        if c1234:
+            for i in range(1, 16):
+                step = SvgSource._rotateStepper = SvgSource._rotateStepper + 1
+                for m in re.compile(r'\d').finditer(id):
+                    m: re.Match
+                    id = id[:m.start()] + str(step % 4 + 1) + id[m.end():]
+                    step = step / 4
+                f = check(id + ".svg")
+                if f:
+                    return f
+
+        return
     
     def __init__(self, parent, id, svgData: bytes, w = 0, h = 0) -> None:
         self.svgData = svgData
@@ -37,10 +122,12 @@ class SvgSource:
     def height(self):
         return self._h or self._renderer.sizeHint().height()
     
-    def paint(self, x: int, y: int, w: int, h: int, p: QPainter):
+    def paint(self, x: int, y: int, w: int, h: int, p: QPainter, ghost=False):
         self._renderer.setFixedSize(w, h)
         p.translate(x, y)
         self._renderer.render(p, flags=QWidget.RenderFlag.DrawChildren)
+        if ghost:
+            p.fillRect(0, 0, w, h, QColor(255, 255, 255, 180))
         p.translate(-x, -y)
         
 class SvgBar(QWidget):
@@ -52,6 +139,8 @@ class SvgBar(QWidget):
         self.setFixedHeight(SvgBar.size * 1.5)
         self.sources = []
         self.setMouseTracking(True)
+        self.setFocusPolicy(QtCore.Qt.FocusPolicy.ClickFocus)
+        self.onDelete = None
         self.update([])
     
     def cells(self):
@@ -87,15 +176,29 @@ class SvgBar(QWidget):
             p.save()
             if i == self.currentHover:
                 p.fillRect(x, 0, SvgBar.size, SvgBar.size * 1.5, QColor(0, 0, 0, 40))
-            p.drawText(QtCore.QRectF(x + 4, SvgBar.size, SvgBar.size - 8, SvgBar.size / 2), unquote(s.svgId.replace('bsicon_', '').replace('.svg', '')), option=opt)
+            p.drawText(QtCore.QRectF(x + 4, SvgBar.size, SvgBar.size - 8, SvgBar.size / 2),
+                       unquote(s.svgId.replace('bsicon_', '').replace('.svg', '').replace('BSicon_', '')), option=opt)
             p.restore()
         p.end()
         return super().paintEvent(a0)
     
+    def keyPressEvent(self, a0: QtGui.QKeyEvent) -> None:
+        if self.currentHover >= 0:
+            idx = self.currentHover + self.page
+            if a0.key() == QtCore.Qt.Key.Key_Delete and self.onDelete:
+                self.onDelete(idx)
+            # if a0.key() == QtCore.Qt.Key.Key_Left and idx > 0:
+            #     self.files[idx], self.files[idx - 1] = self.files[idx - 1], self.files[idx]
+            # if a0.key() == QtCore.Qt.Key.Key_Right and idx < len(self.files):
+            #     self.files[idx], self.files[idx + 1] = self.files[idx + 1], self.files[idx]
+        # self.refresh()
+        return super().keyPressEvent(a0)
+    
     def mousePressEvent(self, a0: QtGui.QMouseEvent) -> None:
         self.currentHover = a0.x() // SvgBar.size
-        if self.currentHover < len(self.sources):
-            self.findMainWin().ghostHold(self.sources[self.currentHover].dupWithSize(BS, BS))
+        if self.currentHover < len(self.sources) and not self.onDelete:
+            self.findMainWin().ghostHoldSvgSource(self.sources[self.currentHover].dupWithSize(BS, BS))
+            self.findMainWin().mapview.setFocus()
         self.repaint()
         return super().mousePressEvent(a0)
     
@@ -121,47 +224,6 @@ class SvgBar(QWidget):
         for i in range(self.page, self.page + self.cells()):
             if i >= len(self.files):
                 break
-            self.sources.append(SvgSource(self, self.files[i][0], self.files[i][1]))
+            self.sources.append(SvgSource.getcreate(self, self.files[i][0], self.files[i][1], BS, BS))
         self.repaint()
-        
-class SvgSearch:
-    def __init__(self, path: str) -> None:
-        self.path = path.strip("/")
-        with open(self.path + '/meta.json', 'rb') as f:
-            data = json.load(f)
-
-        self.data = data
-        self.files = set()
-
-        for k in data:
-            for n in data[k]:
-                self.files.add(n.lower())
-        
-    def search(self, q: str):
-        q = q.lower()
-
-        scores = {}
-        for p in q.split(' '):
-            if not p in self.data:
-                continue
-            for c in self.data[p]:
-                if c in scores:
-                    scores[c] = scores[c] + 1
-                else:
-                    scores[c] = 1
-        c = []
-        for k in scores:
-            c.append((k, scores[k]))
-            
-        test = "bsicon_" + quote(q) + ".svg"
-        if test in self.files:
-            c.append((test, 1e8))
-            
-        uq = quote(q).lower()
-        for f in self.files:
-            f: str = f
-            if f.count(uq) > 0:
-                c.append((f, 1e3 * (1000 - len(f))))
-            
-        c = sorted(c, key=lambda x: (x[1], x[0]), reverse=True)
-        return list(map(lambda x: (x[0], self.path + "/" + x[0]), c))
+       

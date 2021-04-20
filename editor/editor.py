@@ -26,6 +26,7 @@ class Window(QMainWindow):
         super().__init__()
 
         self.searcher = SvgSearch('../../block')
+        SvgSource.Search = self.searcher
 
         self.setWindowTitle("RouteMaster")
         self.setGeometry(0, 0, 800, 500)
@@ -70,9 +71,10 @@ class Window(QMainWindow):
             return
         self.searchResults.update(results)
         
-    def ghostHold(self, s):
+    def ghostHoldSvgSource(self, s):
         self.mapview.ghostHold([MapData.Element(s)])
 
+QApplication.setStyle('fusion')
 app = QApplication([])
 win = Window()
 app.exec_()

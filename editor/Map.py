@@ -1,3 +1,5 @@
+from Parser import parseBS
+from Common import BS
 import math
 import random
 import typing
@@ -34,6 +36,8 @@ class Map(QWidget):
             d = random.random() * math.pi * 2
             x, y = int(l * math.cos(d)), int(l * math.sin(d))
             el = MapData.Element(sources[random.randrange(0, len(sources))])
+            if random.random() > 0.9:
+                el.cascades.append(sources[random.randrange(0, len(sources))])
             if random.random() > 0.8:
                 el.text = "lazy\nfox jumps"
             self.data._put(x, y, el)
@@ -73,13 +77,13 @@ class Map(QWidget):
         return super().paintEvent(a0)
     
     def deltaxy(self): 
-        blockSize = int(MapCell.Base * self.scale)
+        blockSize = int(BS * self.scale)
         sx = mod(self.viewOrigin[0], blockSize)
         sy = mod(self.viewOrigin[1], blockSize)
         return sx, sy
     
     def pan(self, dx, dy):
-        blockSize = MapCell.Base * self.scale
+        blockSize = BS * self.scale
         offsetX = self.viewOrigin[0] = self.viewOrigin[0] + dx
         offsetY = self.viewOrigin[1] = self.viewOrigin[1] + dy
 
@@ -179,12 +183,34 @@ class Map(QWidget):
             c = []
             text = QtGui.QGuiApplication.clipboard().text()
             bad = False
-            for s in text.split('\t'):
-                d: MapData.Element = MapData.Element.unpack(s)
-                if d and d.data and d.data.svgId:
-                    c.append(d)
-                else:
-                    bad = True
+
+            if text.startswith("{"):
+                for s in text.split('\t'):
+                    d: MapData.Element = MapData.Element.unpack(s)
+                    if d and d.src and d.src.svgId:
+                        c.append(d)
+                    else:
+                        bad = True
+            else:
+                rows = parseBS(text)
+                for y in range(len(rows)):
+                    for x in range(len(rows[y])):
+                        d = rows[y][x]
+                        if not d:
+                            continue
+                        if isinstance(d, list):
+                            id, fn = SvgSource.Search.guess(d[0])
+                            if id:
+                                el = MapData.Element(SvgSource.getcreate(self, id, fn, BS, BS), x, y)
+                                for i in range(1, len(d)):
+                                    id, fn = SvgSource.Search.guess(d[0])
+                                    if id:
+                                        el.cascades.append(SvgSource.getcreate(self, id, fn, BS, BS))
+                                c.append(el)
+                        else:
+                            id, fn = SvgSource.Search.guess(d)
+                            if id:
+                                c.append(MapData.Element(SvgSource.getcreate(self, id, fn, BS, BS), x, y))
 
             if bad:
                 QMessageBox(QMessageBox.Icon.Warning, "Paste",
@@ -216,6 +242,8 @@ class Map(QWidget):
             self.selector.clear()
             self.hover.clear()
             self.dragger.reset()
+            self.pressHoldSel = False
+            self.pressPos = None
             self.pan(0, 0)
             self.findMainWin().searchResults.clearSelection()
             
@@ -226,6 +254,16 @@ class Map(QWidget):
             edit: QLineEdit = self.findMainWin().searchBox
             edit.setFocus()
             edit.selectAll()
+            
+        if a0.key() == QtCore.Qt.Key.Key_Q or a0.key() == QtCore.Qt.Key.Key_1:
+            q = a0.key() == QtCore.Qt.Key.Key_Q 
+            c = a0.key() == QtCore.Qt.Key.Key_1
+            for l in self.hover.labels:
+                l: MapData.Element
+                r = SvgSource.tryRotate(l.src.svgId, q=q, c1234=c)
+                if r:
+                    l.src = SvgSource(self, r, SvgSource.Search.path + "/" + r, BS, BS)
+            self.repaint() 
 
         return super().keyPressEvent(a0)
     
@@ -264,7 +302,7 @@ class Map(QWidget):
                 self._toggleSvgBoxesMoving(True)
         elif len(self.hover.labels) > 0:
             old = self.hover.labels
-            self.hover.end()
+            self.hover.end(a0.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier)
             self.pressHoldSel = False
             self.dragger.reset()
             self.pan(0, 0)
@@ -277,21 +315,21 @@ class Map(QWidget):
             self.pressHoldSel = True
             if d:
                 if a0.buttons() & QtCore.Qt.MouseButton.RightButton:
-                    self.selector.addSelection(d, pt, int(MapCell.Base * self.scale))
+                    self.selector.addSelection(d, pt, int(BS * self.scale))
                     self.dragger.start(a0.x(), a0.y(), pt)
                 else:
                     if a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier:
-                        self.selector.addSelection(d, pt, int(MapCell.Base * self.scale))
+                        self.selector.addSelection(d, pt, int(BS * self.scale))
                     elif a0.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier:
                         self.selector.delSelection(d)
                     else:
                         self.selector.clear()
-                        self.selector.addSelection(d, pt, int(MapCell.Base * self.scale))
+                        self.selector.addSelection(d, pt, int(BS * self.scale))
             self.repaint()
         return super().mousePressEvent(a0)
     
     def _blocksize(self):
-        return int(self.scale * MapCell.Base)
+        return int(self.scale * BS)
 
     def mouseMoveEvent(self, a0: QtGui.QMouseEvent) -> None:
         if isinstance(self.pressPos, QtCore.QPoint):
@@ -303,12 +341,10 @@ class Map(QWidget):
             cell: MapCell
             if d:
                 if self.dragger.started:
-                    # self.hover.pt = pt or self.hover.pt
-                    # self.hover.size = int(self.scale * MapCell.Base)
                     self.dragger.drag(a0.x(), a0.y(), pt)
                 else:
                     if a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier:
-                        self.selector.addSelection(d, pt, int(MapCell.Base * self.scale))
+                        self.selector.addSelection(d, pt, int(BS * self.scale))
                     elif a0.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier:
                         self.selector.delSelection(d)
             self.repaint()

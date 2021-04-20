@@ -1,9 +1,11 @@
+from PyQt5.QtSvg import QSvgRenderer, QSvgWidget
+from Svg import SvgBar, SvgSource
 import typing
 from PyQt5 import QtGui
-from PyQt5.QtWidgets import QComboBox, QHBoxLayout, QLabel, QLayout, QMainWindow, QSizePolicy, QSpinBox, QTextEdit, QVBoxLayout, QWidget, qDrawWinButton
+from PyQt5.QtWidgets import QComboBox, QHBoxLayout, QLabel, QLayout, QMainWindow, QScrollArea, QSizePolicy, QSpinBox, QTextEdit, QVBoxLayout, QWidget, qDrawWinButton
 
 from PyQt5 import QtCore
-from PyQt5.QtGui import QFontDatabase 
+from PyQt5.QtGui import QFontDatabase, QImage, QPainter 
 
 class Property(QWidget):
     def _title(self, t):
@@ -13,11 +15,26 @@ class Property(QWidget):
 
     def __init__(self, parent: typing.Optional['QWidget']):
         super().__init__(parent=parent)
-        # self.box = QVBoxLayout(self)
-        # self.box.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
+        self.scrollView = QScrollArea(self)
+        self.scrollView.setWidgetResizable(True)
+        self.scrollView.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
         self.textAttr = QWidget(self)
+        self.textAttr.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         self.textAttrBox = QVBoxLayout()
         self.textAttr.setLayout(self.textAttrBox)
+        
+        img = QImage(500, 500, QImage.Format.Format_ARGB32)
+        p = QPainter(img)
+        r = QSvgRenderer('../../block/BSicon_LSTR.svg')
+        r.render(p)
+        p.end()
+        img.save('1.png')
+        
+        self.cascades = SvgBar(self)
+        self.cascades.setVisible(False)
+        self.cascades.onDelete = self.deleteCascade
+        self.textAttrBox.addWidget(self.cascades)
         
         self.svgId = QLabel('N/A', self)
         self.historyStatus = QLabel('N/A', self)
@@ -70,7 +87,13 @@ class Property(QWidget):
         self.textY.valueChanged.connect(lambda e: self.offsetChanged('y', e))
         self._addBiBoxInTextAttrBox(self._title("Offset X"), self.textX, self._title("Offset Y"), self.textY)
 
-        self.setLayout(self.textAttrBox)
+        # self.setLayout(self.textAttrBox)
+        self.scrollView.setWidget(self.textAttr)
+        box = QVBoxLayout()
+        box.addWidget(self.scrollView)
+        box.setContentsMargins(0, 0, 0, 0)
+        self.setLayout(box)
+
         self.show()
         self.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.MinimumExpanding)
         
@@ -103,6 +126,15 @@ class Property(QWidget):
         for x in self.selection():
             x.text = self.text.toPlainText()
         self.findMainWin().mapview.pan(0, 0)
+        
+    def deleteCascade(self, idx: int):
+        item = self.selection()[0]
+        if idx == 0:
+            item.data = item.cascades[0]
+            item.cascades = item.cascades[1:]
+        else:
+            item.cascades = item.cascades[:idx-1] + item.cascades[idx-1+1:]
+        self.update()
         
     def _foreach(self, f):
         mainData = self.findMainWin().mapview.data
@@ -142,21 +174,29 @@ class Property(QWidget):
     def update(self):
         data = self.findMainWin().mapview.data
         self.historyStatus.setText('{}@{}'.format(data.historyCap, len(data.history)))
-        for k in self.__dict__:
-            w = self.__dict__[k]
-            if isinstance(w, QWidget):
-                w.setEnabled(False)
+        
+        def toggle(v):
+            for k in self.__dict__: # disbale all widgets
+                w = self.__dict__[k]
+                if isinstance(w, QWidget) and w != self.scrollView:
+                    w.setEnabled(v)
+
+        toggle(False)
+        self.cascades.setVisible(False)
+
         items = self.selection()
         if not items:
             self.svgId.setText("N/A")
             return
-        for k in self.__dict__:
-            w = self.__dict__[k]
-            if isinstance(w, QWidget):
-                w.setEnabled(True)
+        toggle(True)
+
         e = items[-1]
         self.updating = True
-        self.svgId.setText(e.data.svgId)
+        self.svgId.setText(e.src.svgId)
+        if e.cascades and len(items) == 1:
+            self.cascades.update([(e.src.svgId, SvgSource.Search.fullpath(e.src.svgId))] + list(
+                map(lambda x: (x.svgId, SvgSource.Search.fullpath(x.svgId)), e.cascades)))
+            self.cascades.setVisible(True)
         self.text.setText(e.text)
         self.textFont.setEditText(e.textFont)
         self.textSize.setEditText(str(e.textSize))
