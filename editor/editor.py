@@ -1,19 +1,16 @@
 import json
 import time
-from Common import APP_NAME, PNG_POLYFILLS
 import typing
 
-import PyQt5.QtGui as QtGui
-import PyQt5.QtSvg as QtSvg
 from PyQt5 import QtCore
-from PyQt5.QtWidgets import (QAction, QApplication, QFileDialog, QGraphicsScale, QHBoxLayout, QLabel, QLineEdit,
-                             QMainWindow, QMenu, QMessageBox, QPushButton, QSplitter,
-                             QStatusBar, QVBoxLayout, QWidget,
-                             qDrawBorderPixmap)
+from PyQt5.QtWidgets import (QApplication, QFileDialog, QGraphicsScale,
+                             QHBoxLayout, QLabel, QLineEdit, QMainWindow,
+                             QMenu, QMessageBox, QPushButton, QSplitter,
+                             QStatusBar, QVBoxLayout, QWidget)
 
-from Controller import DragController, HoverController, Selection
+from Common import APP_NAME, PNG_POLYFILLS
 from Map import Map
-from MapData import MapCell, MapData, SvgSource
+from MapData import MapData, SvgSource
 from Property import Property
 from Svg import SvgBar, SvgSearch
 
@@ -57,7 +54,7 @@ class Window(QMainWindow):
         splitter.addWidget(self.propertyPanel)
 
         self.mapview = Map(main, globalSvgSources)
-        self.currentFile = ''
+        self._updateCurrentFile('')
         splitter.addWidget(self.mapview)
 
         splitter.setStretchFactor(1, 2)
@@ -122,8 +119,7 @@ class Window(QMainWindow):
                     d.data[(el.x, el.y)] = el
             # self.mapview.pan(0, 0)
             self.mapview.center()
-            self.currentFile = fn
-            self.setWindowTitle(APP_NAME + " - " + self.currentFile)
+            self._updateCurrentFile(fn)
     
     def save(self, fn: str):
         d: MapData = self.mapview.data
@@ -142,8 +138,11 @@ class Window(QMainWindow):
                 "data": z,
             }, f)
             d.clearHistory()
-            self.currentFile = fn
-            self.setWindowTitle(APP_NAME + " - " + self.currentFile)
+            self._updateCurrentFile(fn)
+            
+    def _updateCurrentFile(self, fn):
+        self.currentFile = fn
+        self.setWindowTitle(APP_NAME + " - " + (self.currentFile or '[Untitled]'))
         
     def _addMenu(self, top, text, shortcut = None, cb = None):
         if top in self.topMenus:

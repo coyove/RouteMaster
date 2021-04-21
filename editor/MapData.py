@@ -220,20 +220,23 @@ class MapCell:
 
                 text = self.current.text
                 option = QtGui.QTextOption(QtCore.Qt.AlignmentFlag.AlignCenter)
+                bb = int(1000 * self.currentScale)
                 if self.current.textAlign == 'c':
-                    r = QRectF(x + self.current.textX - 1000, y + self.current.textY - 1000, blockSize + 2000, blockSize + 2000) 
+                    r = QRectF(x - bb, y - bb, blockSize + bb * 2, blockSize + bb * 2) 
                 elif self.current.textAlign == 'l':
-                    r = QRectF(x + self.current.textX, y + self.current.textY - 1000, blockSize + 1000, blockSize + 2000) 
+                    r = QRectF(x, y - bb, blockSize + bb, blockSize + bb * 2) 
                     option = QtGui.QTextOption(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
                 elif self.current.textAlign == 'r':
-                    r = QRectF(x + self.current.textX - 1000, y + self.current.textY - 1000, blockSize + 1000, blockSize + 2000) 
+                    r = QRectF(x - bb, y - bb, blockSize + bb, blockSize + bb * 2) 
                     option = QtGui.QTextOption(QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter)
                 elif self.current.textAlign == 't':
-                    r = QRectF(x + self.current.textX - 1000, y + self.current.textY, blockSize + 2000, blockSize + 1000) 
+                    r = QRectF(x - bb, y, blockSize + bb * 2, blockSize + bb) 
                     option = QtGui.QTextOption(QtCore.Qt.AlignmentFlag.AlignHCenter | QtCore.Qt.AlignmentFlag.AlignTop)
                 elif self.current.textAlign == 'b':
-                    r = QRectF(x + self.current.textX - 1000, y + self.current.textY - 1000, blockSize + 2000, blockSize + 1000) 
+                    r = QRectF(x - bb, y - bb, blockSize + bb * 2, blockSize + bb) 
                     option = QtGui.QTextOption(QtCore.Qt.AlignmentFlag.AlignHCenter | QtCore.Qt.AlignmentFlag.AlignBottom)
+                r.setX(r.x() + int(self.current.textX * self.currentScale))
+                r.setY(r.y() + int(self.current.textY * self.currentScale))
                 p.drawText(r, text, option=option)
                 p.restore()
         

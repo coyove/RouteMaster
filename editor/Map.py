@@ -52,6 +52,7 @@ class Map(QWidget):
         self.pan(0, 0) # fill svgBoxes
         self.setMouseTracking(True)
         self.pressPos = None
+        self.pressPosPath = []
         self.pressHoldSel = False
         self.setFocusPolicy(QtCore.Qt.FocusPolicy.ClickFocus)
         
@@ -73,6 +74,9 @@ class Map(QWidget):
         self.selector.paint(p)
         self.dragger.paint(p)
         self.hover.paint(p)
+        for i in range(0, len(self.pressPosPath) - 1):
+            s, e = self.pressPosPath[i], self.pressPosPath[i + 1]
+            p.drawLine(s[0], s[1], e[0], e[1])
         p.end()
         return super().paintEvent(a0)
     
@@ -241,8 +245,10 @@ class Map(QWidget):
             self.dragger.reset()
             self.pressHoldSel = False
             self.pressPos = None
+            self.pressPosPath.clear()
             self.pan(0, 0)
             self.findMainWin().searchResults.clearSelection()
+            QApplication.restoreOverrideCursor()
             
         if a0.key() == QtCore.Qt.Key.Key_Home or a0.key() == QtCore.Qt.Key.Key_H:
             self.center()
@@ -327,12 +333,21 @@ class Map(QWidget):
     
     def _blocksize(self):
         return int(self.scale * BS)
+    
+    def _appendPressPath(self):
+        x, y = self.pressPos.x(), self.pressPos.y()
+        if self.pressPosPath:
+            if abs(x - self.pressPosPath[-1][0]) < 4 or abs(y - self.pressPosPath[-1][1]) < 4:
+                return
+        self.pressPosPath.append((x, y))
 
     def mouseMoveEvent(self, a0: QtGui.QMouseEvent) -> None:
         if isinstance(self.pressPos, QtCore.QPoint):
             diff: QtCore.QPoint = a0.pos() - self.pressPos
+            self._appendPressPath()
             self.pressPos = a0.pos()
-            self.pan(diff.x(), diff.y())
+            if not a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier:
+                self.pan(diff.x(), diff.y())
         elif self.pressHoldSel:
             d, cell, pt = self.findCellUnder(a0)
             cell: MapCell
@@ -349,6 +364,7 @@ class Map(QWidget):
     
     def mouseReleaseEvent(self, a0: QtGui.QMouseEvent) -> None:
         self.pressPos = None
+        self.pressPosPath.clear()
         
         if self.hover.labels:
             pass # hover depends on dragger, so we don't end it

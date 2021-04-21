@@ -70,12 +70,8 @@ class Selection:
     def move(self, dx, dy):
         self.parent.data.begin()
         d: MapData = self.parent.data
-        allocs = set()
         for l in self.labels:
-            allocs.add((l.datax + dx, l.datay + dy))
-        for l in self.labels:
-            if not (l.datax, l.datay) in allocs:
-                d.delete(l.datax, l.datay)
+            d.delete(l.datax, l.datay)
         for l in self.labels:
             d.put(l.datax + dx, l.datay + dy, l.data)
         self.clear()
