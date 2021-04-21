@@ -1,5 +1,7 @@
 BS = 32
 
+APP_NAME = 'RouteMaster'
+
 # these svg files cannot be rendered properly by Qt
 PNG_POLYFILLS = set(filter(lambda x: x.strip(), """
 BSicon_BLaq.svg

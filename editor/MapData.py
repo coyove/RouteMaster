@@ -13,6 +13,17 @@ from Svg import SvgSource
 
 class MapData:
     class Element:
+        def createFromIdsAt(parent, x, y, id, ids):
+            id, fn = SvgSource.Search.guess(id)
+            if id:
+                el = MapData.Element(SvgSource.getcreate(id, fn, BS, BS), x, y)
+                for id in ids:
+                    id, fn = SvgSource.Search.guess(id)
+                    if id:
+                        el.cascades.append(SvgSource.getcreate(id, fn, BS, BS))
+                return el
+            return None
+
         def __init__(self, d: SvgSource = None, x = 0, y = 0) -> None:
             self.src = d
             self.cascades: typing.List[SvgSource] = []
@@ -80,12 +91,15 @@ class MapData:
             try:
                 return MapData.Element.fromdict(json.loads(data))
             except Exception as e:
-                qDebug('unpack:' + data + ", " + str(e))
+                qDebug('unpack:' + str(e))
                 return None
             
     def __init__(self, parent) -> None:
         self.parent = parent
         self.data: typing.Dict[typing.Tuple(int, int), MapData.Element] = {}
+        self.clearHistory()
+        
+    def clearHistory(self):
         self.history = []
         self.historyCap = 0
     
@@ -117,7 +131,8 @@ class MapData:
 
     def _delete(self, x: int, y: int) -> Element:
         old = (x, y) in self.data and self.data[(x, y)] or None
-        del self.data[(x, y)]
+        if (x, y) in self.data:
+            del self.data[(x, y)]
         return old
     
     def _appendHistory(self, h: Element, rev: Element, delx = 0, dely = 0):
@@ -157,6 +172,7 @@ class MapData:
         self.parent.findMainWin().propertyPanel.update()
         
     def _play(self, h: str):
+        print(h)
         if h.startswith('delete:'):
             xy = h[7:].split(':')
             self._delete(int(xy[0]), int(xy[1]))

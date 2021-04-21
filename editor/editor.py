@@ -1,11 +1,13 @@
-from Common import PNG_POLYFILLS
+import json
+import time
+from Common import APP_NAME, PNG_POLYFILLS
 import typing
 
 import PyQt5.QtGui as QtGui
 import PyQt5.QtSvg as QtSvg
 from PyQt5 import QtCore
-from PyQt5.QtWidgets import (QApplication, QGraphicsScale, QHBoxLayout, QLabel, QLineEdit,
-                             QMainWindow, QMessageBox, QPushButton, QSplitter,
+from PyQt5.QtWidgets import (QAction, QApplication, QFileDialog, QGraphicsScale, QHBoxLayout, QLabel, QLineEdit,
+                             QMainWindow, QMenu, QMessageBox, QPushButton, QSplitter,
                              QStatusBar, QVBoxLayout, QWidget,
                              qDrawBorderPixmap)
 
@@ -23,8 +25,9 @@ class Window(QMainWindow):
 
         self.searcher = SvgSearch('../../block')
         SvgSource.Search = self.searcher
+        SvgSource.Parent = self
 
-        self.setWindowTitle("RouteMaster")
+        self.setWindowTitle(APP_NAME)
         self.setGeometry(0, 0, 800, 500)
 
         bar = QStatusBar(self)
@@ -52,11 +55,20 @@ class Window(QMainWindow):
 
         splitter = QSplitter(QtCore.Qt.Orientation.Horizontal)
         splitter.addWidget(self.propertyPanel)
+
         self.mapview = Map(main, globalSvgSources)
+        self.currentFile = ''
         splitter.addWidget(self.mapview)
+
         splitter.setStretchFactor(1, 2)
         splitter.setSizes([100, 100])
         vbox.addWidget(splitter, 255)
+        
+        self.topMenus = {}
+        self._addMenu('&File', '&Open', 'Ctrl+O', self.doOpen)
+        self._addMenu('&File', '-')
+        self._addMenu('&File', '&Save', 'Ctrl+S', self.doSave)
+        self._addMenu('&File', '&Save As...', 'Ctrl+Shift+S', self.doSaveAs)
 
         self.propertyPanel.update()
         self.show()
@@ -70,7 +82,86 @@ class Window(QMainWindow):
     def ghostHoldSvgSource(self, s):
         self.mapview.ghostHold([MapData.Element(s)])
         
-print(len(PNG_POLYFILLS))
+    def doOpen(self, v):
+        d = QFileDialog(self)
+        fn , _ = d.getOpenFileName(filter='BSM Files (*.bsm)')
+        if not fn:
+            return
+        try:
+            self.load(fn)
+        except Exception as e:
+            QMessageBox(QMessageBox.Icon.Warning, 'Open', 'Failed to open {}: {}'.format(fn, e)).exec_()
+            
+    def doSave(self, v):
+        if not self.currentFile:
+            d = QFileDialog(self)
+            self.currentFile, _ = d.getSaveFileName()
+            if not self.currentFile:
+                return
+        self.save(self.currentFile)
+        
+    def doSaveAs(self, v):
+        d = QFileDialog(self)
+        fn, _ = d.getSaveFileName(filter='BSM Files (*.bsm)')
+        if not fn:
+            return
+        try:
+            self.save(fn)
+        except Exception as e:
+            QMessageBox(QMessageBox.Icon.Warning, 'Save', 'Failed to save {}: {}'.format(fn, e)).exec_()
+            
+    def load(self, fn: str):
+        d: MapData = self.mapview.data
+        with open(fn, 'rb') as f:
+            fd = json.load(f)
+            d.clearHistory()
+            d.data = {}
+            for c in fd['data']:
+                el = MapData.Element.fromdict(c)
+                if el:
+                    d.data[(el.x, el.y)] = el
+            # self.mapview.pan(0, 0)
+            self.mapview.center()
+            self.currentFile = fn
+            self.setWindowTitle(APP_NAME + " - " + self.currentFile)
+    
+    def save(self, fn: str):
+        d: MapData = self.mapview.data
+        with open(fn, 'w+') as f:
+            z = []
+            for xy in d.data:
+                (x, y) = xy
+                dd = d.data[xy]
+                if dd.x != x or dd.y != y:
+                    QtCore.qDebug("shouldn't happen: {}-{} {}-{}", x, y, dd.x, dd.y)
+                    continue
+                z.append(dd.todict())
+            json.dump({
+                "author": "test",
+                "ts": int(time.time()),
+                "data": z,
+            }, f)
+            d.clearHistory()
+            self.currentFile = fn
+            self.setWindowTitle(APP_NAME + " - " + self.currentFile)
+        
+    def _addMenu(self, top, text, shortcut = None, cb = None):
+        if top in self.topMenus:
+            m = self.topMenus[top]
+        else:
+            menuBar = self.menuBar()
+            m = QMenu(top, self)
+            menuBar.addAction(m.menuAction())
+            self.topMenus[top] = m
+        if text == '-':
+            m.addSeparator()
+            return
+        fileOpen = m.addAction(text)
+        if shortcut:
+            fileOpen.setShortcut(shortcut)
+        fileOpen.triggered.connect(cb)
+        
+# print(len(PNG_POLYFILLS))
 
 QApplication.setStyle('fusion')
 app = QApplication([])

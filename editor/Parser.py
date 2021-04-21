@@ -30,6 +30,8 @@ def parseBS(s: str):
         for i in range(len(row)):
             if row[i].count('!~') > 0:
                 row[i] = row[i].split('!~')
+            if row[i] == 'leer':
+                row[i] = ''
 
     return rows
     

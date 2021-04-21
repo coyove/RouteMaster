@@ -24,14 +24,14 @@ class Map(QWidget):
 
         sources = sources or []
         for i in range(0, 10):
-            sources.append(SvgSource(self, "id" + str(i), """
+            sources.append(SvgSource("id" + str(i), """
                 <svg height="48" width="48">
                     <text x="8" y="24" fill="red">{}</text>
                     <rect x="8" y="8" width="32" height="32" fill="transparent" stroke="#000"></rect>
                 </svg>""".format(i).encode('utf-8')))
             sources[i].overrideSize(32, 32)
             
-        for i in range(0, 1000):
+        for i in range(0, 0):
             l = int(random.random() * 15 + 10)
             d = random.random() * math.pi * 2
             x, y = int(l * math.cos(d)), int(l * math.sin(d))
@@ -199,18 +199,15 @@ class Map(QWidget):
                         if not d:
                             continue
                         if isinstance(d, list):
-                            id, fn = SvgSource.Search.guess(d[0])
-                            if id:
-                                el = MapData.Element(SvgSource.getcreate(self, id, fn, BS, BS), x, y)
-                                for i in range(1, len(d)):
-                                    id, fn = SvgSource.Search.guess(d[i])
-                                    if id:
-                                        el.cascades.append(SvgSource.getcreate(self, id, fn, BS, BS))
-                                c.append(el)
+                            el = MapData.Element.createFromIdsAt(self, x, y, d[0], d[1:])
+                            el and c.append(el)
                         else:
-                            id, fn = SvgSource.Search.guess(d)
-                            if id:
-                                c.append(MapData.Element(SvgSource.getcreate(self, id, fn, BS, BS), x, y))
+                            el = MapData.Element.createFromIdsAt(self, x, y, d, [])
+                            if el:
+                                c.append(el)
+                            elif c:
+                                el: MapData.Element = c[-1]
+                                el.text, el.textAlign, el.textPlacement = d, 'l', 'r'
 
             if bad:
                 QMessageBox(QMessageBox.Icon.Warning, "Paste",
@@ -262,7 +259,7 @@ class Map(QWidget):
                 l: MapData.Element
                 r = SvgSource.tryRotate(l.src.svgId, q=q, c1234=c)
                 if r:
-                    l.src = SvgSource(self, r, SvgSource.Search.path + "/" + r, BS, BS)
+                    l.src = SvgSource.getcreate(r, SvgSource.Search.path + "/" + r, BS, BS)
             self.repaint() 
 
         return super().keyPressEvent(a0)
@@ -279,8 +276,8 @@ class Map(QWidget):
         r = self.data.bbox()
         cx, cy = r.x() + r.width() // 2, r.y() + r.height() // 2
         x, y = cx * self._blocksize(), cy * self._blocksize()
-        x = x + self.width() // 2
-        y = y + self.height() // 2
+        x = -x + self.width() // 2
+        y = -y + self.height() // 2
         self.viewOrigin = [x, y]
         self.pan(0, 0)
     
@@ -375,7 +372,7 @@ class Map(QWidget):
         if a0.angleDelta().y() > 0:
             self.scale = min(self.scale * 2, 32)
         else:   
-            self.scale = max(self.scale / 2, 0.5)
+            self.scale = max(self.scale / 2, 0.25)
             
         c = a0.pos()
         self.viewOrigin[0] = int((self.viewOrigin[0] - c.x()) * self.scale / lastScale + c.x())
@@ -386,8 +383,5 @@ class Map(QWidget):
     
     def _newSvg(self):
         if self.svgBoxesRecycle:
-            cell: MapCell = self.svgBoxesRecycle[-1]
-            self.svgBoxesRecycle = self.svgBoxesRecycle[:-1]
-            return cell
-        s = MapCell(self)
-        return s
+            return self.svgBoxesRecycle.pop()
+        return MapCell(self)

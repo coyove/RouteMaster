@@ -30,6 +30,8 @@ class SvgSearch:
                 self.files[n.lower()] = n
                 
     def guess(self, s: str):
+        if s.endswith('.svg'):
+            return s, self.fullpath(s)
         p = "bsicon_" + _quote(s).lower() + ".svg"
         if p in self.files:
             return self.files[p], self.fullpath(self.files[p])
@@ -71,14 +73,20 @@ class SvgSearch:
 class SvgSource:
     Manager = {}
     Search: SvgSearch = None
+    Parent: QWidget
     
     def get(id):
-        return id in SvgSource.Manager and SvgSource.Manager[id] or None
-    
-    def getcreate(parent, id, fn, w, h):
         if id in SvgSource.Manager:
             return SvgSource.Manager[id]
-        return SvgSource(parent, id, fn, w, h)
+        fn, p = SvgSource.Search.guess(id)
+        if fn:
+            return SvgSource(fn, p, BS, BS)
+        return None
+    
+    def getcreate(id, fn, w, h):
+        if id in SvgSource.Manager:
+            return SvgSource.Manager[id]
+        return SvgSource(id, fn, w, h)
     
     _rotateStepper = 0
     def tryRotate(id: str, q=False, c1234=False):
@@ -105,13 +113,13 @@ class SvgSource:
 
         return
     
-    def __init__(self, parent, id, svgData: bytes, w = 0, h = 0) -> None:
+    def __init__(self, id, svgData: bytes, w = 0, h = 0) -> None:
         self.svgData = svgData
         self.svgId = id
         if id in PNG_POLYFILLS:
             self._renderer = QPixmap(svgData.removesuffix(".svg") + ".png")
         else:
-            self._renderer = QtSvg.QSvgWidget(parent)
+            self._renderer = QtSvg.QSvgWidget(SvgSource.Parent)
             self._renderer.load(svgData)
             self._renderer.setVisible(False)
         self._w, self._h = w, h
@@ -128,15 +136,14 @@ class SvgSource:
     
     def paint(self, x: int, y: int, w: int, h: int, p: QPainter, ghost=False):
         if isinstance(self._renderer, QPixmap):
-            pix: QPixmap = self._renderer
-            p.drawPixmap(x, y, w, h, pix)
+            p.drawPixmap(x, y, w, h, self._renderer)
         else:
             self._renderer.setFixedSize(w, h)
             p.translate(x, y)
             self._renderer.render(p, flags=QWidget.RenderFlag.DrawChildren)
-            if ghost:
-                p.fillRect(0, 0, w, h, QColor(255, 255, 255, 180))
             p.translate(-x, -y)
+        if ghost:
+            p.fillRect(x, y, w, h, QColor(255, 255, 255, 180))
         
 class SvgBar(QWidget):
     size = 64
@@ -232,6 +239,6 @@ class SvgBar(QWidget):
         for i in range(self.page, self.page + self.cells()):
             if i >= len(self.files):
                 break
-            self.sources.append(SvgSource.getcreate(self, self.files[i][0], self.files[i][1], BS, BS))
+            self.sources.append(SvgSource.getcreate(self.files[i][0], self.files[i][1], BS, BS))
         self.repaint()
        

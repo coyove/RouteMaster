@@ -14,6 +14,7 @@ class Selection:
     class Block:
         def __init__(self, data: MapData.Element, pos: QtCore.QPoint, size: int) -> None:
             self.x, self.y = pos.x(), pos.y()
+            self.datax, self.datay = data.x, data.y
             self.size = size
             self.data = data
             
@@ -71,14 +72,12 @@ class Selection:
         d: MapData = self.parent.data
         allocs = set()
         for l in self.labels:
-            allocs.add((l.data.x + dx, l.data.y + dy))
+            allocs.add((l.datax + dx, l.datay + dy))
         for l in self.labels:
-            dd = l.data
-            if not (dd.x, dd.y) in allocs:
-                d.delete(dd.x, dd.y)
+            if not (l.datax, l.datay) in allocs:
+                d.delete(l.datax, l.datay)
         for l in self.labels:
-            dd = l.data
-            d.put(dd.x + dx, dd.y + dy, dd)
+            d.put(l.datax + dx, l.datay + dy, l.data)
         self.clear()
             
     def clear(self):
