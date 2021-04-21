@@ -203,7 +203,7 @@ class Map(QWidget):
                             if id:
                                 el = MapData.Element(SvgSource.getcreate(self, id, fn, BS, BS), x, y)
                                 for i in range(1, len(d)):
-                                    id, fn = SvgSource.Search.guess(d[0])
+                                    id, fn = SvgSource.Search.guess(d[i])
                                     if id:
                                         el.cascades.append(SvgSource.getcreate(self, id, fn, BS, BS))
                                 c.append(el)

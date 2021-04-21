@@ -9,6 +9,8 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 	"unicode"
@@ -21,6 +23,33 @@ import (
 func main() {
 	rand.Seed(time.Now().Unix())
 	db, _ := bbolt.Open("icon.db", 0777, nil)
+
+	if true {
+		gobuf, _ := exec.Command("go", "env", "GOPATH").Output()
+		root := filepath.Join(strings.TrimSpace(string(gobuf)), "src/github.com/coyove/block")
+
+		fmt.Println(root)
+
+		files, _ := ioutil.ReadDir(root)
+		paths := []string{}
+		for _, f := range files {
+			fn := f.Name()
+			if strings.HasSuffix(fn, ".svg") {
+				paths = append(paths, root+"/"+fn)
+			}
+		}
+		for i := 0; i < len(paths); i += 100 {
+			end := i + 100
+			if end > len(paths) {
+				end = len(paths)
+			}
+			fmt.Println(i)
+			args := []string{"--export-type", "png", "-h", "128"}
+			args = append(args, paths[i:end]...)
+			exec.Command("/usr/local/bin/Inkscape", args...).Run()
+		}
+		return
+	}
 
 	if true {
 		zipFile, _ := os.Create("icon.zip")
@@ -72,6 +101,7 @@ func main() {
 
 				if i++; i%100 == 0 {
 					fmt.Println(time.Now().Format("15:04:05"), "data cp", i)
+					time.Sleep(time.Second / 2)
 				}
 			}
 

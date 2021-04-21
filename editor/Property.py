@@ -24,13 +24,6 @@ class Property(QWidget):
         self.textAttrBox = QVBoxLayout()
         self.textAttr.setLayout(self.textAttrBox)
         
-        img = QImage(500, 500, QImage.Format.Format_ARGB32)
-        p = QPainter(img)
-        r = QSvgRenderer('../../block/BSicon_LSTR.svg')
-        r.render(p)
-        p.end()
-        img.save('1.png')
-        
         self.cascades = SvgBar(self)
         self.cascades.setVisible(False)
         self.cascades.onDelete = self.deleteCascade

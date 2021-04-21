@@ -6,11 +6,15 @@ import typing
 
 from PyQt5 import QtGui
 from PyQt5 import QtCore, QtSvg
-from PyQt5.QtGui import QColor, QFont, QFontMetrics, QPainter
+from PyQt5.QtGui import QColor, QFont, QFontMetrics, QPainter, QPixmap
 from PyQt5.QtWidgets import QListView, QMainWindow, QPushButton, QTableWidget, QTableWidgetItem, QToolBar, QWidget 
 from urllib.parse import quote, unquote
-from Common import BS
+from Common import BS, PNG_POLYFILLS
 import os
+
+def _quote(s: str):
+    s = quote(s)
+    return s.replace('%40', '@')
  
 class SvgSearch:
     def __init__(self, path: str) -> None:
@@ -26,7 +30,7 @@ class SvgSearch:
                 self.files[n.lower()] = n
                 
     def guess(self, s: str):
-        p = "bsicon_" + s.lower() + ".svg"
+        p = "bsicon_" + _quote(s).lower() + ".svg"
         if p in self.files:
             return self.files[p], self.fullpath(self.files[p])
         return "", ""
@@ -50,11 +54,11 @@ class SvgSearch:
         for k in scores:
             c.append((k, scores[k]))
             
-        test = "bsicon_" + quote(q) + ".svg"
+        test = "bsicon_" + _quote(q) + ".svg"
         if test in self.files:
             c.append((self.files[test], 1e8))
             
-        uq = quote(q).lower()
+        uq = _quote(q).lower()
         for f in self.files:
             f: str = f
             if f.count(uq) > 0:
@@ -104,14 +108,14 @@ class SvgSource:
     def __init__(self, parent, id, svgData: bytes, w = 0, h = 0) -> None:
         self.svgData = svgData
         self.svgId = id
-        self._renderer = QtSvg.QSvgWidget(parent)
-        self._renderer.load(svgData)
-        self._renderer.setVisible(False)
+        if id in PNG_POLYFILLS:
+            self._renderer = QPixmap(svgData.removesuffix(".svg") + ".png")
+        else:
+            self._renderer = QtSvg.QSvgWidget(parent)
+            self._renderer.load(svgData)
+            self._renderer.setVisible(False)
         self._w, self._h = w, h
         SvgSource.Manager[self.svgId] = self
-        
-    def dupWithSize(self, w, h):
-        return SvgSource(self._renderer.parent(), self.svgId, self.svgData, w, h)
         
     def overrideSize(self, w, h):
         self._w, self._h = w, h
@@ -123,12 +127,16 @@ class SvgSource:
         return self._h or self._renderer.sizeHint().height()
     
     def paint(self, x: int, y: int, w: int, h: int, p: QPainter, ghost=False):
-        self._renderer.setFixedSize(w, h)
-        p.translate(x, y)
-        self._renderer.render(p, flags=QWidget.RenderFlag.DrawChildren)
-        if ghost:
-            p.fillRect(0, 0, w, h, QColor(255, 255, 255, 180))
-        p.translate(-x, -y)
+        if isinstance(self._renderer, QPixmap):
+            pix: QPixmap = self._renderer
+            p.drawPixmap(x, y, w, h, pix)
+        else:
+            self._renderer.setFixedSize(w, h)
+            p.translate(x, y)
+            self._renderer.render(p, flags=QWidget.RenderFlag.DrawChildren)
+            if ghost:
+                p.fillRect(0, 0, w, h, QColor(255, 255, 255, 180))
+            p.translate(-x, -y)
         
 class SvgBar(QWidget):
     size = 64
@@ -197,7 +205,7 @@ class SvgBar(QWidget):
     def mousePressEvent(self, a0: QtGui.QMouseEvent) -> None:
         self.currentHover = a0.x() // SvgBar.size
         if self.currentHover < len(self.sources) and not self.onDelete:
-            self.findMainWin().ghostHoldSvgSource(self.sources[self.currentHover].dupWithSize(BS, BS))
+            self.findMainWin().ghostHoldSvgSource(self.sources[self.currentHover])
             self.findMainWin().mapview.setFocus()
         self.repaint()
         return super().mousePressEvent(a0)

@@ -69,9 +69,15 @@ class Selection:
     def move(self, dx, dy):
         self.parent.data.begin()
         d: MapData = self.parent.data
+        allocs = set()
+        for l in self.labels:
+            allocs.add((l.data.x + dx, l.data.y + dy))
         for l in self.labels:
             dd = l.data
-            d.delete(dd.x, dd.y)
+            if not (dd.x, dd.y) in allocs:
+                d.delete(dd.x, dd.y)
+        for l in self.labels:
+            dd = l.data
             d.put(dd.x + dx, dd.y + dy, dd)
         self.clear()
             

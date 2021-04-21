@@ -1,8 +1,4 @@
-import json
-import math
-import os
-import random
-from typing import ValuesView
+from Common import PNG_POLYFILLS
 import typing
 
 import PyQt5.QtGui as QtGui
@@ -73,6 +69,8 @@ class Window(QMainWindow):
         
     def ghostHoldSvgSource(self, s):
         self.mapview.ghostHold([MapData.Element(s)])
+        
+print(len(PNG_POLYFILLS))
 
 QApplication.setStyle('fusion')
 app = QApplication([])
