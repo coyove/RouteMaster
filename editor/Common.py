@@ -1,3 +1,6 @@
+import os
+
+
 BS = 32
 
 APP_NAME = 'RouteMaster'
@@ -732,3 +735,10 @@ BSicon_uLKRWgl.svg
 BSicon_uLSTR2%2B4.svg
 BSicon_4HUBa@L~RRq.svg
 """.split('\n')))
+
+if __name__ == '__main__':
+    for f in os.listdir('../../block'):
+        if f.endswith(".svg"):
+            if f in PNG_POLYFILLS:
+                continue
+            os.remove("../../block/" + f.removesuffix(".svg") + ".png")

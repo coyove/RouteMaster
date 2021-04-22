@@ -1,25 +1,22 @@
-from Svg import SvgSource
-from math import trunc
 import typing
-from warnings import simplefilter
+
 from PyQt5 import QtCore
-from PyQt5.QtWidgets import QLabel
+from PyQt5.QtGui import QColor, QPainter, QPen
+
 from MapData import MapCell, MapData
-from PyQt5.QtGui import QColor, QMouseEvent, QPainter, QPainterPath, QPen, QPicture
+
 
 class Selection:
     Add = 1
     Clear = 2
     
     class Block:
-        def __init__(self, data: MapData.Element, pos: QtCore.QPoint, size: int) -> None:
-            self.x, self.y = pos.x(), pos.y()
+        def __init__(self, data: MapData.Element) -> None:
             self.datax, self.datay = data.x, data.y
-            self.size = size
             self.data = data
             
         def oddeven(self):
-            return (self.x // self.size + self.y // self.size) % 2
+            return (self.datax + self.datay) % 2
 
     def __init__(self, parent) -> None:
         self.parent = parent
@@ -30,18 +27,21 @@ class Selection:
         d: DragController = self.parent.dragger
         dd = d.dragtonorm - d.startnorm
         x, y = dd.x(), dd.y()
+        bs = self.parent._blocksize()
         for l in self.labels:
-            p.fillRect(l.x, l.y, l.size, l.size, QColor(255, 255, 0, l.oddeven() and 135 or 90))
+            posx = l.data.x * bs + self.parent.viewOrigin[0]
+            posy = l.data.y * bs + self.parent.viewOrigin[1]
+            p.fillRect(posx, posy, bs, bs, QColor(255, 255, 0, l.oddeven() and 135 or 90))
             if x or y: # paint select-n-drag blocks if presented
                 el: MapData.Element = l.data
-                el.src.paint(l.x + x, l.y + y, l.size, l.size, p, ghost=True)
+                el.src.paint(posx + x, posy + y, bs, bs, p, ghost=True)
         
-    def addSelection(self, data: MapData.Element, pos: QtCore.QPoint, size, propertyPanel = True):
+    def addSelection(self, data: MapData.Element, propertyPanel = True):
         if not data.src:
             return False
         if id(data) in self.dedup:
             return False
-        label = Selection.Block(data, pos, size)
+        label = Selection.Block(data)
         self.labels.append(label)
         self.dedup[id(data)] = label
         self.parent.selectionEvent(Selection.Add, data)
@@ -56,16 +56,6 @@ class Selection:
         del self.dedup[id(data)]
         self.labels.remove(x)
         self.parent.findMainWin().propertyPanel.update()
-        
-    def moveIncr(self, x, y, size):
-        for l in self.labels:
-            l.size = size
-            l.x, l.y = l.x + x, l.y + y
-
-    def moveZoom(self, cx, cy, deltaScale):
-        for l in self.labels:
-            l.x = int((l.x - cx) * deltaScale + cx)
-            l.y = int((l.y - cy) * deltaScale + cy)
         
     def move(self, dx, dy):
         self.parent.data.begin()
@@ -102,10 +92,10 @@ class HoverController:
         x, y = d.dragtonorm.x(), d.dragtonorm.y()
         for l in self.labels:
             el: MapData.Element = l
-            # p.fillRect((l.x - self.labels[0].x ) * bs + x, (l.y - self.labels[0].y) * bs + y, bs, bs, QColor(100, 120, 120, 45))
-            el.src.paint((l.x - self.labels[0].x ) * bs + x, (l.y - self.labels[0].y) * bs + y, bs, bs, p, ghost=True)
+            xx, yy = (l.x - self.labels[0].x) * bs + x, (l.y - self.labels[0].y) * bs + y
+            el.src.paint(xx, yy, bs, bs, p, ghost=True)
             for c in el.cascades:
-                c.paint((l.x - self.labels[0].x ) * bs + x, (l.y - self.labels[0].y) * bs + y, bs, bs, p, ghost=True)
+                c.paint(xx, yy, bs, bs, p, ghost=True)
     
     def end(self, cascade):
         if len(self.labels) == 0:
@@ -118,7 +108,9 @@ class HoverController:
         cell: MapCell
         
         if cascade and cell and d1 and len(self.labels) == 1:
+            old = cell.current.pack()
             cell.current.cascades.append(self.labels[0].src)
+            d._appendHistoryPacked(old, cell.current.pack())
         elif d1:
             x, y = self.labels[0].x, self.labels[0].y
             for l in self.labels:

@@ -1,8 +1,13 @@
 import json
+import os
+import sys
 import time
 import typing
+from multiprocessing import Process
+import multiprocessing as mp
+import multiprocessing.popen_fork
 
-from PyQt5 import QtCore
+from PyQt5 import QtCore, QtGui
 from PyQt5.QtWidgets import (QApplication, QFileDialog, QGraphicsScale,
                              QHBoxLayout, QLabel, QLineEdit, QMainWindow,
                              QMenu, QMessageBox, QPushButton, QSplitter,
@@ -17,7 +22,7 @@ from Svg import SvgBar, SvgSearch
 globalSvgSources: typing.List[SvgSource] = None
 
 class Window(QMainWindow):
-    def __init__(self):
+    def __init__(self, mpq):
         super().__init__()
 
         self.searcher = SvgSearch('../../block')
@@ -34,6 +39,10 @@ class Window(QMainWindow):
         bar.addWidget(self.barSelection, 1)
         self.barZoom = QLabel(bar)
         bar.addWidget(self.barZoom, 1)
+        self.barCursor = QLabel(bar)
+        bar.addWidget(self.barCursor, 1)
+        self.barHistory = QLabel(bar)
+        bar.addWidget(self.barHistory, 1)
         self.setStatusBar(bar)
 
         main = QWidget(self)
@@ -64,13 +73,35 @@ class Window(QMainWindow):
         vbox.addWidget(splitter, 255)
         
         self.topMenus = {}
+        self._addMenu('&File', '&New', 'Ctrl+N', self.doNew)
+        self._addMenu('&File', '&New Window', 'Ctrl+Shift+N', lambda x: mpq.put(1))
+        self._addMenu('&File', '-')
         self._addMenu('&File', '&Open', 'Ctrl+O', self.doOpen)
         self._addMenu('&File', '-')
         self._addMenu('&File', '&Save', 'Ctrl+S', self.doSave)
         self._addMenu('&File', '&Save As...', 'Ctrl+Shift+S', self.doSaveAs)
 
+        self._addMenu('&Edit', '&Undo', '', lambda x: self.mapview.actUndoRedo())
+        self._addMenu('&Edit', '&Redo', '', lambda x: self.mapview.actUndoRedo(redo=True))
+        self._addMenu('&Edit', '-')
+        self._addMenu('&Edit', '&Cut', '', lambda x: self.mapview.actCut())
+        self._addMenu('&Edit', '&Copy', '', lambda x: self.mapview.actCopy())
+        self._addMenu('&Edit', '&Paste', '', lambda x: self.mapview.actPaste())
+        self._addMenu('&Edit', '-')
+        self._addMenu('&Edit', '&Clear History', '', lambda x: self.mapview.data.clearHistory())
+        self._addMenu('&Edit', '-')
+        self._addMenu('&Edit', '&Select by Text', '', lambda x: self.mapview.actSelectByText())
+        
+        self._addMenu('&View', '&Center', '', lambda x: self.mapview.center())
+        self._addMenu('&View', 'Center &Selected', 'Ctrl+Shift+H', lambda x: self.mapview.center(selected=True))
+        self._addMenu('&View', '100% &Zoom', '', lambda x: self.mapview.center(resetzoom=True))
+
         self.propertyPanel.update()
-        self.show()
+        self.showMaximized()
+        
+    def closeEvent(self, a0: QtGui.QCloseEvent) -> None:
+        self._askSave()
+        return super().closeEvent(a0)
         
     def updateSearches(self):
         results = self.searcher.search(self.searchBox.text())
@@ -81,7 +112,22 @@ class Window(QMainWindow):
     def ghostHoldSvgSource(self, s):
         self.mapview.ghostHold([MapData.Element(s)])
         
+    def _askSave(self):
+        if self.mapview.data.historyCap:
+            if QMessageBox.question(self, "Save", "Save current file?") == QMessageBox.StandardButton.Yes:
+                self.doSave(True)
+                
+    def doNew(self, v):
+        self._askSave()
+        d = self.mapview.data
+        d.clearHistory()
+        d.data = {}
+        self.mapview.scale = 2
+        self.mapview.center()
+        self._updateCurrentFile('')
+       
     def doOpen(self, v):
+        self._askSave()
         d = QFileDialog(self)
         fn , _ = d.getOpenFileName(filter='BSM Files (*.bsm)')
         if not fn:
@@ -141,6 +187,7 @@ class Window(QMainWindow):
             }, f)
             d.clearHistory()
             self._updateCurrentFile(fn)
+            self.propertyPanel.update()
             
     def _updateCurrentFile(self, fn):
         self.currentFile = fn
@@ -163,8 +210,47 @@ class Window(QMainWindow):
         fileOpen.triggered.connect(cb)
         
 # print(len(PNG_POLYFILLS))
+def start(q):
+    QApplication.setStyle('fusion')
+    app = QApplication([])
+    win = Window(q)
+    app.exec_()
+    
+class _Popen(multiprocessing.popen_fork.Popen):
+    def __init__(self, *args, **kw):
+        if hasattr(sys, 'frozen'):
+            # We have to set original _MEIPASS2 value from sys._MEIPASS
+            # to get --onefile mode working.
+            # Last character is stripped in C-loader. We have to add
+            # '/' or '\\' at the end.
+            os.putenv('_MEIPASS2', sys._MEIPASS + os.sep)
+        try:
+            super(_Popen, self).__init__(*args, **kw)
+        finally:
+            if hasattr(sys, 'frozen'):
+                # On some platforms (e.g. AIX) 'os.unsetenv()' is not
+                # available. In those cases we cannot delete the variable
+                # but only set it to the empty string. The bootloader
+                # can handle this case.
+                if hasattr(os, 'unsetenv'):
+                    os.unsetenv('_MEIPASS2')
+                else:
+                    os.putenv('_MEIPASS2', '')
 
-QApplication.setStyle('fusion')
-app = QApplication([])
-win = Window()
-app.exec_()
+class Process(mp.Process):
+    _Popen = _Popen
+    
+if __name__ == '__main__':
+    mp.freeze_support()
+    mp.set_start_method("spawn")
+    p = sys.platform.startswith('win') and Process or mp.Process
+    q = mp.Queue()
+    p(target=start, args=(q,)).start()
+    while True:
+        try:
+            q.get(timeout=1)
+            p(target=start, args=(q,)).start()
+        except:
+            if not mp.active_children():
+                break
+    print('server exited')

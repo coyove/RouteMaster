@@ -1,15 +1,16 @@
-from Parser import parseBS
-from Common import BS
 import math
 import random
 import typing
 
 import PyQt5.QtGui as QtGui
 from PyQt5 import QtCore
-from PyQt5.QtWidgets import (QApplication, QLineEdit, QMainWindow, QMessageBox, QWidget)
+from PyQt5.QtWidgets import (QApplication, QInputDialog, QLineEdit, QMainWindow, QMessageBox,
+                             QWidget)
 
+from Common import BS
 from Controller import DragController, HoverController, Selection
 from MapData import MapCell, MapData, SvgSource
+from Parser import parseBS
 
 
 def mod(x, y):
@@ -69,8 +70,7 @@ class Map(QWidget):
         p.fillRect(0, 0, self.width(), self.height(), QtGui.QColor(255, 255, 255))
         for row in self.svgBoxes:
             for cell in row:
-                if cell:
-                    cell.paint(p)
+                cell and cell.paint(p)
         self.selector.paint(p)
         self.dragger.paint(p)
         self.hover.paint(p)
@@ -91,8 +91,6 @@ class Map(QWidget):
         offsetX = self.viewOrigin[0] = self.viewOrigin[0] + dx
         offsetY = self.viewOrigin[1] = self.viewOrigin[1] + dy
 
-        self.selector.moveIncr(dx, dy, blockSize)
-
         rows = int(self.height() / blockSize) + 3
         cols = int(self.width() / blockSize) + 3
         for r in self.svgBoxes:
@@ -103,21 +101,19 @@ class Map(QWidget):
             
         for i in range(rows, len(self.svgBoxes)):
             for cell in self.svgBoxes[i]:
-                if cell:
-                    self.cacheSvgBoxLocked(cell)
+                cell and self.cacheSvgBoxLocked(cell)
         self.svgBoxes = self.svgBoxes[:rows]
 
         for r in self.svgBoxes:
             for i in range(cols, len(r)):
-                if r[i]:
-                    self.cacheSvgBoxLocked(r[i])
+                r[i] and self.cacheSvgBoxLocked(r[i])
             r[cols:] = []
             
         sx, sy = self.deltaxy()
 
         for y in range(len(self.svgBoxes)):
             for x in range(len(self.svgBoxes[y])):
-                tmp = self.data.get(x - int(offsetX / blockSize), y - int(offsetY / blockSize))
+                tmp = self.data.get(x - int(offsetX / blockSize) - 1, y - int(offsetY / blockSize) - 1)
                 cell: MapCell = self.svgBoxes[y][x]
                 if (tmp == None or not tmp.valid()) and cell:
                     self.svgBoxes[y][x] = None
@@ -125,7 +121,7 @@ class Map(QWidget):
 
         for y in range(len(self.svgBoxes)):
             for x in range(len(self.svgBoxes[y])):
-                tmp = self.data.get(x - int(offsetX / blockSize), y - int(offsetY / blockSize))
+                tmp = self.data.get(x - int(offsetX / blockSize) - 1, y - int(offsetY / blockSize) - 1)
                 cell: MapCell = self.svgBoxes[y][x]
                 if tmp and tmp.valid():
                     cell = cell or self._newSvg()
@@ -142,12 +138,13 @@ class Map(QWidget):
         c = a0 and a0.pos() or c
         bs = self._blocksize()
         sx, sy = self.deltaxy()
+        rr = math.floor
         ix = math.ceil((c.x() - sx) / bs) # xy of cell
         iy = math.ceil((c.y() - sy) / bs)
         pt = QtCore.QPoint(int((c.x() - sx) / bs) * bs + sx, int((c.y() - sy) / bs) * bs + sy)
         x_ = (c.x() - self.viewOrigin[0]) / bs # xy of data
         y_ = (c.y() - self.viewOrigin[1]) / bs
-        x, y = math.ceil(x_), math.ceil(y_)
+        x, y = rr(x_), rr(y_)
         if x_ == x or y_ == y: # special case: cursor on edge, no cell found
             return None, None, pt
         d = self.data.get(x, y) or MapData.Element(x = x, y = y)
@@ -167,78 +164,25 @@ class Map(QWidget):
         self.findMainWin().barSelection.setText(self.selector.status())
         
     def keyPressEvent(self, a0: QtGui.QKeyEvent) -> None:
-        delete = a0.key() == QtCore.Qt.Key.Key_Delete
+        if a0.key() == QtCore.Qt.Key.Key_Delete:
+            self.actDelete()
+            
         ctrl = QtGui.QGuiApplication.keyboardModifiers() & QtCore.Qt.KeyboardModifier.ControlModifier 
           
-        if ctrl and (a0.key() == QtCore.Qt.Key.Key_C or a0.key() == QtCore.Qt.Key.Key_X):
-            delete = a0.key() == QtCore.Qt.Key.Key_X
-            s = []
-            for l in self.selector.labels:
-                s.append(l.data.pack())
-            QtGui.QGuiApplication.clipboard().setText("\t".join(s))
-            
-        if delete:
-            self.data.begin()
-            for l in self.selector.labels:
-                self.data.delete(l.data.x, l.data.y)
-            self.selector.clear()
-            self.pan(0, 0)
+        if ctrl and a0.key() == QtCore.Qt.Key.Key_C:
+            self.actCopy()
+
+        if ctrl and a0.key() == QtCore.Qt.Key.Key_X:
+            self.actCut()
             
         if ctrl and a0.key() == QtCore.Qt.Key.Key_V:
-            c = []
-            text = QtGui.QGuiApplication.clipboard().text()
-            bad = False
-
-            if text.startswith("{"):
-                for s in text.split('\t'):
-                    d: MapData.Element = MapData.Element.unpack(s)
-                    if d and d.src and d.src.svgId:
-                        c.append(d)
-                    else:
-                        bad = True
-            else:
-                rows = parseBS(text)
-                for y in range(len(rows)):
-                    for x in range(len(rows[y])):
-                        d = rows[y][x]
-                        if not d:
-                            continue
-                        if isinstance(d, list):
-                            el = MapData.Element.createFromIdsAt(self, x, y, d[0], d[1:])
-                            el and c.append(el)
-                        else:
-                            el = MapData.Element.createFromIdsAt(self, x, y, d, [])
-                            if el:
-                                c.append(el)
-                            elif c:
-                                el: MapData.Element = c[-1]
-                                el.text, el.textAlign, el.textPlacement = d, 'l', 'r'
-
-            if bad:
-                QMessageBox(QMessageBox.Icon.Warning, "Paste",
-                            c and "Invalid blocks have been filtered ({} remain)".format(len(c)) or "No valid blocks to paste").exec_()
-
-            if len(c):
-                self.ghostHold(c)
+            self.actPaste() 
                 
         if ctrl and (a0.key() == QtCore.Qt.Key.Key_Z or a0.key() == QtCore.Qt.Key.Key_Y):
-            if a0.key() == QtCore.Qt.Key.Key_Z:
-                self.data.rewind()
-            else:
-                self.data.forward()
-            self.selector.clear()
-            self.pan(0, 0)
+            self.actUndoRedo(a0.key() == QtCore.Qt.Key.Key_Y)
             
         if ctrl and a0.key() == QtCore.Qt.Key.Key_A:
-            self.selector.clear()
-            for k in self.data.data:
-                (x, y), el = k, self.data.data[k]
-                self.selector.addSelection(el, QtCore.QPoint(
-                    (x - 1) * self._blocksize() + self.viewOrigin[0],
-                    (y - 1) * self._blocksize() + self.viewOrigin[1]),
-                    self._blocksize(), propertyPanel=False)
-            self.findMainWin().propertyPanel.update()
-            self.repaint()
+            self.actSelectAll()
             
         if a0.key() == QtCore.Qt.Key.Key_Escape:
             self.selector.clear()
@@ -271,6 +215,86 @@ class Map(QWidget):
 
         return super().keyPressEvent(a0)
     
+    def actDelete(self):
+        self.data.begin()
+        for l in self.selector.labels:
+            self.data.delete(l.data.x, l.data.y)
+        self.selector.clear()
+        self.pan(0, 0)
+    
+    def actSelectAll(self):
+        self.selector.clear()
+        for k in self.data.data:
+            self.selector.addSelection(self.data.data[k], propertyPanel=False)
+        self.findMainWin().propertyPanel.update()
+        self.repaint()
+        
+    def actCopy(self):
+        s = []
+        for l in self.selector.labels:
+            s.append(l.data.pack())
+        QtGui.QGuiApplication.clipboard().setText("\t".join(s))
+        
+    def actCut(self):
+        self.actCopy()
+        self.actDelete()
+        
+    def actPaste(self):
+        c = []
+        text = QtGui.QGuiApplication.clipboard().text()
+        bad = False
+
+        if text.startswith("{"):
+            for s in text.split('\t'):
+                d: MapData.Element = MapData.Element.unpack(s)
+                if d and d.src and d.src.svgId:
+                    c.append(d)
+                else:
+                    bad = True
+        else:
+            rows = parseBS(text)
+            for y in range(len(rows)):
+                for x in range(len(rows[y])):
+                    d = rows[y][x]
+                    if not d:
+                        continue
+                    if isinstance(d, list):
+                        el = MapData.Element.createFromIdsAt(self, x, y, d[0], d[1:])
+                        el and c.append(el)
+                    else:
+                        el = MapData.Element.createFromIdsAt(self, x, y, d, [])
+                        if el:
+                            c.append(el)
+                        elif c:
+                            el: MapData.Element = c[-1]
+                            el.text, el.textAlign, el.textPlacement = d, 'l', 'r'
+
+        if bad:
+            QMessageBox(QMessageBox.Icon.Warning, "Paste",
+                        c and "Invalid blocks have been filtered ({} remain)".format(len(c)) or "No valid blocks to paste").exec_()
+
+        if len(c):
+            self.ghostHold(c)
+
+    def actUndoRedo(self, redo=False):
+        if redo:
+            self.data.forward()
+        else:
+            self.data.rewind()
+        self.selector.clear()
+        self.pan(0, 0)
+        
+    def actSelectByText(self):
+        x, ok = QInputDialog.getText(self, 'Select by Text', 'Text:')
+        if not ok or not x:
+            return 
+        self.selector.clear()
+        for k in self.data.data:
+            d = self.data.data[k]
+            if d.text.lower().count(x.lower()) > 0:
+                self.selector.addSelection(d, propertyPanel=False)
+        self.findMainWin().propertyPanel.update()
+    
     def ghostHold(self, c: typing.List[MapData.Element]):
         self.data.begin()
         self.selector.clear()
@@ -278,10 +302,19 @@ class Map(QWidget):
         self.dragger.start(0, 0, QtCore.QPoint(0, 0))
         self.dragger.visible = False
         self.pressHoldSel = True
-    
-    def center(self):
-        r = self.data.bbox()
-        cx, cy = r.x() + r.width() // 2, r.y() + r.height() // 2
+        
+    def center(self, selected=False, resetzoom=False):
+        if resetzoom:
+            self.scale = 1
+        if len(self.data.data) == 0:
+            self.viewOrigin = [0, 0]
+            self.pan(0, 0)
+            return
+        if selected and len(self.selector.labels):
+            cx, cy = self.selector.labels[0].datax, self.selector.labels[0].datay
+        else:
+            r = self.data.bbox()
+            cx, cy = r.x() + r.width() // 2, r.y() + r.height() // 2
         x, y = cx * self._blocksize(), cy * self._blocksize()
         x = -x + self.width() // 2
         y = -y + self.height() // 2
@@ -302,7 +335,7 @@ class Map(QWidget):
         if a0.buttons() & QtCore.Qt.MouseButton.MidButton:
             self.pressPos = a0.pos()
             QApplication.setOverrideCursor(QtCore.Qt.CursorShape.DragMoveCursor)
-            if len(self.svgBoxes) * len(self.svgBoxes[0]) > 1600:
+            if len(self.svgBoxes) * len(self.svgBoxes[0]) > 1600 and len(self.data.data) > 900:
                 self._toggleSvgBoxesMoving(True)
         elif len(self.hover.labels) > 0:
             old = self.hover.labels
@@ -311,7 +344,7 @@ class Map(QWidget):
             self.dragger.reset()
             self.pan(0, 0)
             if a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier:
-                self.ghostHold([x.dup() for x in old])
+                self.ghostHold([x.dup() for x in old]) # continue holding
             else:
                 self.findMainWin().searchResults.clearSelection()
         else:
@@ -319,18 +352,18 @@ class Map(QWidget):
             self.pressHoldSel = True
             if d:
                 if a0.buttons() & QtCore.Qt.MouseButton.RightButton:
-                    self.selector.addSelection(d, pt, int(BS * self.scale))
+                    self.selector.addSelection(d)
                     self.dragger.start(a0.x(), a0.y(), pt)
                 else:
                     if a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier:
-                        if not self.selector.addSelection(d, pt, int(BS * self.scale)):
+                        if not self.selector.addSelection(d):
                             self.pressPos = a0.pos()
                             self.pressPosPath.append((a0.x(), a0.y()))
                     elif a0.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier:
                         self.selector.delSelection(d)
                     else:
                         self.selector.clear()
-                        self.selector.addSelection(d, pt, int(BS * self.scale))
+                        self.selector.addSelection(d)
             self.repaint()
         return super().mousePressEvent(a0)
     
@@ -345,6 +378,9 @@ class Map(QWidget):
         self.pressPosPath.append((x, y))
 
     def mouseMoveEvent(self, a0: QtGui.QMouseEvent) -> None:
+        d, cell, pt = self.findCellUnder(a0)
+        if d:
+            self.findMainWin().barCursor.setText("{}-{}".format(d.x, d.y))
         if a0.buttons() & QtCore.Qt.MouseButton.MidButton:
         # if isinstance(self.pressPos, QtCore.QPoint):
             diff: QtCore.QPoint = a0.pos() - self.pressPos
@@ -355,14 +391,12 @@ class Map(QWidget):
             self.pressPos = a0.pos()
             self.repaint()
         elif self.pressHoldSel:
-            d, cell, pt = self.findCellUnder(a0)
-            cell: MapCell
             if d:
                 if self.dragger.started:
                     self.dragger.drag(a0.x(), a0.y(), pt)
                 else:
                     if a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier:
-                        self.selector.addSelection(d, pt, int(BS * self.scale))
+                        self.selector.addSelection(d)
                     elif a0.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier:
                         self.selector.delSelection(d)
             self.repaint()
@@ -381,7 +415,7 @@ class Map(QWidget):
                         p = QtCore.QPoint(cell.posx + self._blocksize() // 2, cell.posy + self._blocksize() // 2)
                         if poly.containsPoint(p, QtCore.Qt.FillRule.OddEvenFill):
                             # print(cell.current.src.svgId)
-                            self.selector.addSelection(cell.current, QtCore.QPoint(cell.posx, cell.posy), self._blocksize(), propertyPanel=False)
+                            self.selector.addSelection(cell.current, propertyPanel=False)
             self.findMainWin().propertyPanel.update()
             self.pressPosPath.clear()
         
@@ -412,7 +446,6 @@ class Map(QWidget):
         c = a0.pos()
         self.viewOrigin[0] = int((self.viewOrigin[0] - c.x()) * self.scale / lastScale + c.x())
         self.viewOrigin[1] = int((self.viewOrigin[1] - c.y()) * self.scale / lastScale + c.y())
-        self.selector.moveZoom(c.x(), c.y(), self.scale / lastScale)
         self.pan(0, 0)
         return super().wheelEvent(a0)
     

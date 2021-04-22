@@ -1,11 +1,13 @@
-from PyQt5.QtSvg import QSvgRenderer, QSvgWidget
-from Svg import SvgBar, SvgSource
 import typing
-from PyQt5 import QtGui
-from PyQt5.QtWidgets import QComboBox, QHBoxLayout, QLabel, QLayout, QMainWindow, QScrollArea, QSizePolicy, QSpinBox, QTextEdit, QVBoxLayout, QWidget, qDrawWinButton
 
 from PyQt5 import QtCore
-from PyQt5.QtGui import QFontDatabase, QImage, QPainter 
+from PyQt5.QtGui import QFontDatabase
+from PyQt5.QtWidgets import (QComboBox, QHBoxLayout, QLabel, QMainWindow,
+                             QScrollArea, QSizePolicy, QSpinBox, QTextEdit,
+                             QVBoxLayout, QWidget)
+
+from Svg import SvgBar, SvgSource
+
 
 class Property(QWidget):
     def _title(self, t):
@@ -30,8 +32,8 @@ class Property(QWidget):
         self.textAttrBox.addWidget(self.cascades)
         
         self.svgId = QLabel('N/A', self)
-        self.historyStatus = QLabel('N/A', self)
-        self._addBiBoxInTextAttrBox(self._title('Type'), self.svgId, self._title("Status"), self.historyStatus)
+        self.textAttrBox.addWidget(self._title('Type'))
+        self.textAttrBox.addWidget(self.svgId)
 
         self.textAttrBox.addWidget(self._title('Text'))
         self.text = QTextEdit(self)
@@ -174,7 +176,8 @@ class Property(QWidget):
     
     def update(self):
         data = self.findMainWin().mapview.data
-        self.historyStatus.setText('{}@{}'.format(data.historyCap, len(data.history)))
+        self.findMainWin().barHistory.setText('{}@{}'.format(data.historyCap, len(data.history)))
+        self.findMainWin().barHistory.setStyleSheet(data.historyCap and "background: #80f0f000" or "")
         
         def toggle(v):
             for k in self.__dict__: # disbale all widgets

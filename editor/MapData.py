@@ -49,8 +49,7 @@ class MapData:
         
         def dup(self):
             tmp, tmpc = self.src, self.cascades
-            self.src = None
-            self.cascades = None
+            self.src, self.cascades = None, None
             obj = copy.deepcopy(self)
             self.src, obj.src = tmp, tmp
             self.cascades, obj.cascades = tmpc, tmpc
@@ -98,11 +97,13 @@ class MapData:
     def __init__(self, parent) -> None:
         self.parent = parent
         self.data: typing.Dict[typing.Tuple(int, int), MapData.Element] = {}
-        self.clearHistory()
+        self.history = []
+        self.historyCap = 0
         
     def clearHistory(self):
         self.history = []
         self.historyCap = 0
+        self.parent.findMainWin().propertyPanel.update()
     
     def put(self, x: int, y: int, d: Element):
         self._appendHistory(self._put(x, y, d), d, x, y)
@@ -139,8 +140,11 @@ class MapData:
     def _appendHistory(self, h: Element, rev: Element, delx = 0, dely = 0):
         hs = h is None and 'delete:{}:{}'.format(delx, dely) or h.pack() # rewind
         revs = rev is None and 'delete:{}:{}'.format(delx, dely) or rev.pack() # forward
+        self._appendHistoryPacked(hs, revs)
+        
+    def _appendHistoryPacked(self, h: str, rev: str):
         self.history = self.history[:self.historyCap]
-        self.history.append((hs, revs))
+        self.history.append((h, rev))
         self.historyCap = self.historyCap + 1
     
     def begin(self):
@@ -221,6 +225,8 @@ class MapCell:
                 text = self.current.text
                 option = QtGui.QTextOption(QtCore.Qt.AlignmentFlag.AlignCenter)
                 bb = int(1000 * self.currentScale)
+                dx = int(self.current.textX * self.currentScale)
+                dy = int(self.current.textY * self.currentScale)
                 if self.current.textAlign == 'c':
                     r = QRectF(x - bb, y - bb, blockSize + bb * 2, blockSize + bb * 2) 
                 elif self.current.textAlign == 'l':
@@ -235,8 +241,10 @@ class MapCell:
                 elif self.current.textAlign == 'b':
                     r = QRectF(x - bb, y - bb, blockSize + bb * 2, blockSize + bb) 
                     option = QtGui.QTextOption(QtCore.Qt.AlignmentFlag.AlignHCenter | QtCore.Qt.AlignmentFlag.AlignBottom)
-                r.setX(r.x() + int(self.current.textX * self.currentScale))
-                r.setY(r.y() + int(self.current.textY * self.currentScale))
+                r.setX(r.x() + dx)
+                r.setY(r.y() + dy)
+                r.setWidth(r.width() + dx)
+                r.setHeight(r.height() + dy)
                 p.drawText(r, text, option=option)
                 p.restore()
         
