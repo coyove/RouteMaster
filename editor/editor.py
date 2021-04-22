@@ -32,6 +32,8 @@ class Window(QMainWindow):
         bar.addWidget(self.barPosition, 1)
         self.barSelection = QLabel(bar)
         bar.addWidget(self.barSelection, 1)
+        self.barZoom = QLabel(bar)
+        bar.addWidget(self.barZoom, 1)
         self.setStatusBar(bar)
 
         main = QWidget(self)

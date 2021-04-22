@@ -103,7 +103,14 @@ class Property(QWidget):
     
     def eventFilter(self, a0, a1: QtCore.QEvent) -> bool:
         if a1.type() == QtCore.QEvent.FocusIn and a0 is self.text:
-            self._foreach(lambda x: None)
+            self.findMainWin().mapview.data.begin()
+            self.oldTextStore = []
+            for x in self.selection():
+                self.oldTextStore.append(x.dup())
+        if a1.type() == QtCore.QEvent.FocusOut and a0 is self.text:
+            for x in self.selection():
+                self.findMainWin().mapview.data._appendHistory(self.oldTextStore.pop(0), x)
+            self.oldTextStore.clear()
         return super().eventFilter(a0, a1)
 
     def _addBiBoxInTextAttrBox(self, t1, w1, t2, w2):
@@ -123,7 +130,7 @@ class Property(QWidget):
     def deleteCascade(self, idx: int):
         item = self.selection()[0]
         if idx == 0:
-            item.data = item.cascades[0]
+            item.src = item.cascades[0]
             item.cascades = item.cascades[1:]
         else:
             item.cascades = item.cascades[:idx-1] + item.cascades[idx-1+1:]
@@ -135,6 +142,7 @@ class Property(QWidget):
         for x in self.selection():
             old = x.dup()
             f(x)
+            # print(old.pack(), x.pack())
             mainData._appendHistory(old, x)
         self.findMainWin().mapview.pan(0, 0)
         

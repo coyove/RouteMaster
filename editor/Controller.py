@@ -38,16 +38,16 @@ class Selection:
         
     def addSelection(self, data: MapData.Element, pos: QtCore.QPoint, size, propertyPanel = True):
         if not data.src:
-            return
+            return False
         if id(data) in self.dedup:
-            return
-
+            return False
         label = Selection.Block(data, pos, size)
         self.labels.append(label)
         self.dedup[id(data)] = label
         self.parent.selectionEvent(Selection.Add, data)
         if propertyPanel:
             self.parent.findMainWin().propertyPanel.update()
+        return True
         
     def delSelection(self, data: MapData.Element):
         if not id(data) in self.dedup:

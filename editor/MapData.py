@@ -172,7 +172,7 @@ class MapData:
         self.parent.findMainWin().propertyPanel.update()
         
     def _play(self, h: str):
-        print(h)
+        # print(h)
         if h.startswith('delete:'):
             xy = h[7:].split(':')
             self._delete(int(xy[0]), int(xy[1]))

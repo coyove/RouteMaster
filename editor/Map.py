@@ -74,8 +74,8 @@ class Map(QWidget):
         self.selector.paint(p)
         self.dragger.paint(p)
         self.hover.paint(p)
-        for i in range(0, len(self.pressPosPath) - 1):
-            s, e = self.pressPosPath[i], self.pressPosPath[i + 1]
+        for i in range(0, len(self.pressPosPath)):
+            s, e = self.pressPosPath[i], self.pressPosPath[i < len(self.pressPosPath) - 1 and i + 1 or 0]
             p.drawLine(s[0], s[1], e[0], e[1])
         p.end()
         return super().paintEvent(a0)
@@ -133,6 +133,7 @@ class Map(QWidget):
                     cell.loadResizeMove(tmp, self.scale, x * int(blockSize) + sx - blockSize, y * int(blockSize) + sy - blockSize)
                 
         self.findMainWin().barPosition.setText('x:{}({}) y:{}({})'.format(-offsetX, -int(offsetX / blockSize), offsetY, int(offsetY / blockSize)))
+        self.findMainWin().barZoom.setText('{}%'.format(int(self.scale * 100)))
         
         self.selectionEvent()
         self.repaint()
@@ -322,7 +323,9 @@ class Map(QWidget):
                     self.dragger.start(a0.x(), a0.y(), pt)
                 else:
                     if a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier:
-                        self.selector.addSelection(d, pt, int(BS * self.scale))
+                        if not self.selector.addSelection(d, pt, int(BS * self.scale)):
+                            self.pressPos = a0.pos()
+                            self.pressPosPath.append((a0.x(), a0.y()))
                     elif a0.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier:
                         self.selector.delSelection(d)
                     else:
@@ -337,17 +340,20 @@ class Map(QWidget):
     def _appendPressPath(self):
         x, y = self.pressPos.x(), self.pressPos.y()
         if self.pressPosPath:
-            if abs(x - self.pressPosPath[-1][0]) < 4 or abs(y - self.pressPosPath[-1][1]) < 4:
+            if abs(x - self.pressPosPath[-1][0]) < 4 and abs(y - self.pressPosPath[-1][1]) < 4:
                 return
         self.pressPosPath.append((x, y))
 
     def mouseMoveEvent(self, a0: QtGui.QMouseEvent) -> None:
-        if isinstance(self.pressPos, QtCore.QPoint):
+        if a0.buttons() & QtCore.Qt.MouseButton.MidButton:
+        # if isinstance(self.pressPos, QtCore.QPoint):
             diff: QtCore.QPoint = a0.pos() - self.pressPos
+            self.pressPos = a0.pos()
+            self.pan(diff.x(), diff.y())
+        elif a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier and self.pressPosPath:
             self._appendPressPath()
             self.pressPos = a0.pos()
-            if not a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier:
-                self.pan(diff.x(), diff.y())
+            self.repaint()
         elif self.pressHoldSel:
             d, cell, pt = self.findCellUnder(a0)
             cell: MapCell
@@ -364,7 +370,20 @@ class Map(QWidget):
     
     def mouseReleaseEvent(self, a0: QtGui.QMouseEvent) -> None:
         self.pressPos = None
-        self.pressPosPath.clear()
+        
+        if self.pressPosPath:
+            poly = QtGui.QPolygon()
+            for x, y in self.pressPosPath:
+                poly.append(QtCore.QPoint(x, y))
+            for row in self.svgBoxes:
+                for cell in row:
+                    if cell and cell.current:
+                        p = QtCore.QPoint(cell.posx + self._blocksize() // 2, cell.posy + self._blocksize() // 2)
+                        if poly.containsPoint(p, QtCore.Qt.FillRule.OddEvenFill):
+                            # print(cell.current.src.svgId)
+                            self.selector.addSelection(cell.current, QtCore.QPoint(cell.posx, cell.posy), self._blocksize(), propertyPanel=False)
+            self.findMainWin().propertyPanel.update()
+            self.pressPosPath.clear()
         
         if self.hover.labels:
             pass # hover depends on dragger, so we don't end it
@@ -386,9 +405,9 @@ class Map(QWidget):
             
         lastScale = self.scale
         if a0.angleDelta().y() > 0:
-            self.scale = min(self.scale * 2, 32)
+            self.scale = min(self.scale < 1 and self.scale + 0.125 or self.scale + 1, 32)
         else:   
-            self.scale = max(self.scale / 2, 0.25)
+            self.scale = max(self.scale <= 1 and self.scale - 0.125 or self.scale - 1, 0.25)
             
         c = a0.pos()
         self.viewOrigin[0] = int((self.viewOrigin[0] - c.x()) * self.scale / lastScale + c.x())
