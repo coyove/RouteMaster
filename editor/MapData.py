@@ -48,11 +48,12 @@ class MapData:
             return setattr(self, k, v)
         
         def dup(self):
-            tmp = self.src
+            tmp, tmpc = self.src, self.cascades
             self.src = None
+            self.cascades = None
             obj = copy.deepcopy(self)
-            self.src = tmp
-            obj.src = tmp
+            self.src, obj.src = tmp, tmp
+            self.cascades, obj.cascades = tmpc, tmpc
             return obj
         
         def todict(self):
@@ -181,7 +182,6 @@ class MapData:
             self._put(d.x, d.y, d)
 
 class MapCell:
-    Base = 32
     selectedTextPen = QPen(QColor(0, 0, 255, 120)) 
     
     def __init__(self, parent) -> None:
