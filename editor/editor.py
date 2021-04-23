@@ -1,11 +1,9 @@
+from SvgPackage import load_package
 import json
-import os
-import sys
 import time
 import typing
-from multiprocessing import Process
 import multiprocessing as mp
-import multiprocessing.popen_fork
+from zipfile import ZipInfo
 
 from PyQt5 import QtCore, QtGui
 from PyQt5.QtWidgets import (QApplication, QFileDialog, QGraphicsScale,
@@ -25,7 +23,7 @@ class Window(QMainWindow):
     def __init__(self, mpq):
         super().__init__()
 
-        self.searcher = SvgSearch('../../block')
+        self.searcher = SvgSearch('block')
         SvgSource.Search = self.searcher
         SvgSource.Parent = self
 
@@ -216,40 +214,16 @@ def start(q):
     win = Window(q)
     app.exec_()
     
-class _Popen(multiprocessing.popen_fork.Popen):
-    def __init__(self, *args, **kw):
-        if hasattr(sys, 'frozen'):
-            # We have to set original _MEIPASS2 value from sys._MEIPASS
-            # to get --onefile mode working.
-            # Last character is stripped in C-loader. We have to add
-            # '/' or '\\' at the end.
-            os.putenv('_MEIPASS2', sys._MEIPASS + os.sep)
-        try:
-            super(_Popen, self).__init__(*args, **kw)
-        finally:
-            if hasattr(sys, 'frozen'):
-                # On some platforms (e.g. AIX) 'os.unsetenv()' is not
-                # available. In those cases we cannot delete the variable
-                # but only set it to the empty string. The bootloader
-                # can handle this case.
-                if hasattr(os, 'unsetenv'):
-                    os.unsetenv('_MEIPASS2')
-                else:
-                    os.putenv('_MEIPASS2', '')
-
-class Process(mp.Process):
-    _Popen = _Popen
-    
 if __name__ == '__main__':
+    load_package('../../block.zip')
     mp.freeze_support()
-    mp.set_start_method("spawn")
-    p = sys.platform.startswith('win') and Process or mp.Process
+    mp.set_start_method('spawn')
     q = mp.Queue()
-    p(target=start, args=(q,)).start()
+    mp.Process(target=start, args=(q,)).start()
     while True:
         try:
             q.get(timeout=1)
-            p(target=start, args=(q,)).start()
+            mp.Process(target=start, args=(q,)).start()
         except:
             if not mp.active_children():
                 break
