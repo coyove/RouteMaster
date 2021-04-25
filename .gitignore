@@ -1,4 +1,5 @@
 data
+*.svg
 *.pyc
 bus
 .DS_Store

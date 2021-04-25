@@ -133,6 +133,13 @@ class SvgSource:
     
     def height(self):
         return self._h or self._renderer.sizeHint().height()
+
+    def source(self):
+        try:
+            with open(self.svgData, 'rb') as f:
+                return f.read().decode('utf-8')
+        except Exception as e:
+            QtCore.qDebug("SvgSource.source: {}".format(e))
     
     def paint(self, x: int, y: int, w: int, h: int, p: QPainter, ghost=False):
         if isinstance(self._renderer, QPixmap):

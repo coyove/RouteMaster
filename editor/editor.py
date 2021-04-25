@@ -1,4 +1,4 @@
-from MapExport import exportMapDataImage
+from MapExport import exportMapDataPng, exportMapDataSvg
 from SvgPackage import load_package
 import json
 import time
@@ -7,7 +7,7 @@ import multiprocessing as mp
 from zipfile import ZipInfo
 
 from PyQt5 import QtCore, QtGui
-from PyQt5.QtWidgets import (QApplication, QFileDialog, QGraphicsScale,
+from PyQt5.QtWidgets import (QApplication, QFileDialog, QGraphicsDropShadowEffect, QGraphicsScale,
                              QHBoxLayout, QLabel, QLineEdit, QMainWindow,
                              QMenu, QMessageBox, QPushButton, QSplitter,
                              QStatusBar, QVBoxLayout, QWidget)
@@ -80,7 +80,8 @@ class Window(QMainWindow):
         self._addMenu('&File', '&Save', 'Ctrl+S', self.doSave)
         self._addMenu('&File', '&Save As...', 'Ctrl+Shift+S', self.doSaveAs)
         self._addMenu('&File', '-')
-        self._addMenu('&File', '&Export PNG...', '', self.doExportPNG)
+        self._addMenu('&File', '&Export PNG...', '', lambda x: self.doExportPngSvg(png=True))
+        self._addMenu('&File', '&Export SVG...', '', lambda x: self.doExportPngSvg(png=False))
 
         self._addMenu('&Edit', '&Undo', '', lambda x: self.mapview.actUndoRedo())
         self._addMenu('&Edit', '&Redo', '', lambda x: self.mapview.actUndoRedo(redo=True))
@@ -99,6 +100,9 @@ class Window(QMainWindow):
 
         self.propertyPanel.update()
         self.showMaximized()
+
+        self.load('123.bsm')
+        exportMapDataSvg(self, '11.svg', self.mapview.data)
         
     def closeEvent(self, a0: QtGui.QCloseEvent) -> None:
         self._askSave()
@@ -156,13 +160,17 @@ class Window(QMainWindow):
         except Exception as e:
             QMessageBox(QMessageBox.Icon.Warning, 'Save', 'Failed to save {}: {}'.format(fn, e)).exec_()
 
-    def doExportPNG(self, v):
+    def doExportPngSvg(self, v=True, png=True):
         d = QFileDialog(self)
-        fn, _ = d.getSaveFileName(filter='PNG Files (*.png)')
+        fn, _ = d.getSaveFileName(filter='PNG File (*.png)' if png else 'SVG File (*.svg)')
         if not fn:
             return
         try:
-            exportMapDataImage(self, fn, self.mapview.data, self.mapview.svgBoxes)
+            if png:
+                exportMapDataPng(self, fn, self.mapview.data)
+            else:
+                exportMapDataSvg(self, fn, self.mapview.data)
+            QMessageBox.information(self, 'Export', 'Successfully exported to {}'.format(fn))
         except Exception as e:
             QMessageBox(QMessageBox.Icon.Warning, 'Export', 'Failed to export {}: {}'.format(fn, e)).exec_()
             

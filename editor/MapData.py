@@ -1,7 +1,9 @@
 import copy
 import json
+import math
 import sys
 import typing
+import collections
 
 from PyQt5 import QtCore, QtGui
 from PyQt5.QtCore import QRect, QRectF, qDebug
@@ -91,6 +93,49 @@ class MapDataElement:
         except Exception as e:
             qDebug('unpack:' + str(e))
             return None
+
+    def textbbox(self, scale: float, x = 0, y = 0, measure=False):
+        blockSize = BS * scale
+        if self.textPlacement == 'c':
+            pass
+        elif self.textPlacement == 'l':
+            x = x - blockSize
+        elif self.textPlacement == 'r':
+            x = x + blockSize
+        elif self.textPlacement == 't':
+            y = y - blockSize
+        elif self.textPlacement == 'b':
+            y = y + blockSize
+
+        option = QtCore.Qt.AlignmentFlag.AlignCenter
+        bb = int(1000 * scale)
+        dx = int(self.textX * scale)
+        dy = int(self.textY * scale)
+        if self.textAlign == 'c':
+            r = QRect(x - bb, y - bb, blockSize + bb * 2, blockSize + bb * 2) 
+        elif self.textAlign == 'l':
+            r = QRect(x, y - bb, blockSize + bb, blockSize + bb * 2) 
+            option = QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
+        elif self.textAlign == 'r':
+            r = QRect(x - bb, y - bb, blockSize + bb, blockSize + bb * 2) 
+            option = QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter
+        elif self.textAlign == 't':
+            r = QRect(x - bb, y, blockSize + bb * 2, blockSize + bb) 
+            option = QtCore.Qt.AlignmentFlag.AlignHCenter | QtCore.Qt.AlignmentFlag.AlignTop
+        else: # self.textAlign == 'b':
+            r = QRect(x - bb, y - bb, blockSize + bb * 2, blockSize + bb) 
+            option = QtCore.Qt.AlignmentFlag.AlignHCenter | QtCore.Qt.AlignmentFlag.AlignBottom
+        r.setX(r.x() + dx)
+        r.setY(r.y() + dy)
+        r.setWidth(r.width() + dx)
+        r.setHeight(r.height() + dy)
+
+        if measure:
+            m = QFontMetrics(MapCell.FontsManager.get(self.textFont, int(self.textSize * scale)))
+            r = m.boundingRect(r, option, self.text)
+            # print(r)
+            return r
+        return r, option
     
 class MapData: 
     def __init__(self, parent) -> None:
@@ -116,15 +161,22 @@ class MapData:
     def get(self, x: int, y: int) -> MapDataElement:
         return (x, y) in self.data and self.data[(x, y)] or None
     
-    def bbox(self) -> QRect:
+    def bbox(self, includeText=False) -> QRect:
         maxx, maxy = -sys.maxsize, -sys.maxsize
         minx, miny = sys.maxsize, sys.maxsize
-        for k in self.data:
-            (x, y) = k
+        def merge(x, y):
+            nonlocal maxx, maxy, minx, miny
             maxx = max(maxx, x)
             maxy = max(maxy, y)
             minx = min(minx, x)
             miny = min(miny, y)
+        for k in self.data:
+            (x, y) = k
+            merge(x, y)
+            if includeText and self.data[k].text:
+                r = self.data[k].textbbox(scale=1, measure=True)
+                merge(math.ceil(r.x() / BS) - 1 + x, math.ceil(r.y() / BS) - 1 + y)
+                merge(math.ceil((r.x() + r.width()) / BS) + 1 + x, math.ceil((r.y() + r.height()) / BS) + 1 + y)
         return QRect(minx, miny, maxx - minx, maxy - miny)
        
     def delete(self, x: int, y: int):
@@ -185,76 +237,56 @@ class MapData:
             self._put(d.x, d.y, d)
 
 class MapCell:
-    selectedTextPen = QPen(QColor(0, 0, 255, 120)) 
+    _selectedTextPen = QPen(QColor(0, 0, 255, 120)) 
+
+    class FontsManager:
+        cache = {}
+        @classmethod
+        def get(cls, name, size):
+            key = hash(name) << 10 | size
+            if key in cls.cache:
+                return cls.cache[key]
+            font = QFont(name, size)
+            cls.cache[key] = font
+            if len(cls.cache) > 100: # simple
+                cls.cache.clear()
+            return font
     
     def __init__(self, parent) -> None:
         self.current: MapDataElement = None
-        self.currentScale = 1.0
         self.moving = False
         self.parent = parent
         
     def paint(self, p: QPainter): 
         blockSize = self.parent._blocksize()
+        scale = self.parent.scale
+        w, h = self.current.src.width() * scale, self.current.src.height() * scale
         if self.moving and self.parent.currentData != self.current:
             p.drawRect(self.posx, self.posy, blockSize, blockSize)
         elif self.current:
-            self.current.src.paint(self.x, self.y, self.w, self.h, p)
+            self.current.src.paint(self.x, self.y, w, h, p)
             for s in self.current.cascades:
-                s.paint(self.x, self.y, self.w, self.h, p)
-            if self.current.text:
-                font = QFont(self.current.textFont, int(self.current.textSize * self.currentScale))
-                p.save()
-                p.setFont(font)
-                
-                x, y = self.posx, self.posy
-                if self.current.textPlacement == 'c':
-                    pass
-                elif self.current.textPlacement == 'l':
-                    x = x - blockSize
-                elif self.current.textPlacement == 'r':
-                    x = x + blockSize
-                elif self.current.textPlacement == 't':
-                    y = y - blockSize
-                elif self.current.textPlacement == 'b':
-                    y = y + blockSize
-                    
-                if self.current == self.parent.currentData:
-                    p.setPen(MapCell.selectedTextPen)
+                s.paint(self.x, self.y, w, h, p)
+            if not self.current.text:
+                return
+            font = MapCell.FontsManager.get(self.current.textFont, int(self.current.textSize * scale))
+            p.save()
+            p.setFont(font)
+            
+            if self.current == self.parent.currentData:
+                p.setPen(MapCell._selectedTextPen)
 
-                text = self.current.text
-                option = QtGui.QTextOption(QtCore.Qt.AlignmentFlag.AlignCenter)
-                bb = int(1000 * self.currentScale)
-                dx = int(self.current.textX * self.currentScale)
-                dy = int(self.current.textY * self.currentScale)
-                if self.current.textAlign == 'c':
-                    r = QRectF(x - bb, y - bb, blockSize + bb * 2, blockSize + bb * 2) 
-                elif self.current.textAlign == 'l':
-                    r = QRectF(x, y - bb, blockSize + bb, blockSize + bb * 2) 
-                    option = QtGui.QTextOption(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
-                elif self.current.textAlign == 'r':
-                    r = QRectF(x - bb, y - bb, blockSize + bb, blockSize + bb * 2) 
-                    option = QtGui.QTextOption(QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter)
-                elif self.current.textAlign == 't':
-                    r = QRectF(x - bb, y, blockSize + bb * 2, blockSize + bb) 
-                    option = QtGui.QTextOption(QtCore.Qt.AlignmentFlag.AlignHCenter | QtCore.Qt.AlignmentFlag.AlignTop)
-                elif self.current.textAlign == 'b':
-                    r = QRectF(x - bb, y - bb, blockSize + bb * 2, blockSize + bb) 
-                    option = QtGui.QTextOption(QtCore.Qt.AlignmentFlag.AlignHCenter | QtCore.Qt.AlignmentFlag.AlignBottom)
-                r.setX(r.x() + dx)
-                r.setY(r.y() + dy)
-                r.setWidth(r.width() + dx)
-                r.setHeight(r.height() + dy)
-                p.drawText(r, text, option=option)
-                p.restore()
+            text = self.current.text
+            r, option = self.current.textbbox(scale, self.posx, self.posy)
+            p.drawText(QRectF(r.x(), r.y(), r.width(), r.height()), text, option=QtGui.QTextOption(option))
+            p.restore()
+
+            self.current.textbbox(scale)
         
     def loadResizeMove(self, data: MapDataElement, scale: float, x: int, y: int):
         self.current = data
-        self.currentScale = scale
-        # super().load(data.svgData)
-        # svgSize = self.sizeHint()
-        # w, h = int(svgSize.width() * scale), int(svgSize.height() * scale)
-        self.w, self.h = int(data.src.width() * scale), int(data.src.height() * scale)
-        
-        self.posx, self.posy = x, y
-        self.x = int(x - (self.w - BS * scale) / 2)
-        self.y = int(y - (self.h - BS * scale) / 2)
+        self.posx = x
+        self.posy = y
+        w, h = int(data.src.width() * scale), int(data.src.height() * scale)
+        self.x = int(x - (w - BS * scale) / 2)
+        self.y = int(y - (h - BS * scale) / 2)
