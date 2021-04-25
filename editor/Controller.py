@@ -3,7 +3,7 @@ import typing
 from PyQt5 import QtCore
 from PyQt5.QtGui import QColor, QPainter, QPen
 
-from MapData import MapCell, MapData
+from MapData import MapCell, MapData, MapDataElement
 
 
 class Selection:
@@ -11,7 +11,7 @@ class Selection:
     Clear = 2
     
     class Block:
-        def __init__(self, data: MapData.Element) -> None:
+        def __init__(self, data: MapDataElement) -> None:
             self.datax, self.datay = data.x, data.y
             self.data = data
             
@@ -33,10 +33,10 @@ class Selection:
             posy = l.data.y * bs + self.parent.viewOrigin[1]
             p.fillRect(posx, posy, bs, bs, QColor(255, 255, 0, l.oddeven() and 135 or 90))
             if x or y: # paint select-n-drag blocks if presented
-                el: MapData.Element = l.data
+                el: MapDataElement = l.data
                 el.src.paint(posx + x, posy + y, bs, bs, p, ghost=True)
         
-    def addSelection(self, data: MapData.Element, propertyPanel = True):
+    def addSelection(self, data: MapDataElement, propertyPanel = True):
         if not data.src:
             return False
         if id(data) in self.dedup:
@@ -49,7 +49,7 @@ class Selection:
             self.parent.findMainWin().propertyPanel.update()
         return True
         
-    def delSelection(self, data: MapData.Element):
+    def delSelection(self, data: MapDataElement):
         if not id(data) in self.dedup:
             return 
         x = self.dedup[id(data)]
@@ -78,12 +78,12 @@ class Selection:
 class HoverController:
     def __init__(self, parent) -> None:
         self.parent = parent
-        self.labels: typing.List[MapData.Element] = []
+        self.labels: typing.List[MapDataElement] = []
         
     def clear(self):
         self.labels = self.labels[:0]
         
-    def hold(self, data: typing.List[MapData.Element]):
+    def hold(self, data: typing.List[MapDataElement]):
         self.labels = data
         
     def paint(self, p: QPainter):
@@ -91,7 +91,7 @@ class HoverController:
         bs = self.parent._blocksize()
         x, y = d.dragtonorm.x(), d.dragtonorm.y()
         for l in self.labels:
-            el: MapData.Element = l
+            el: MapDataElement = l
             xx, yy = (l.x - self.labels[0].x) * bs + x, (l.y - self.labels[0].y) * bs + y
             el.src.paint(xx, yy, bs, bs, p, ghost=True)
             for c in el.cascades:

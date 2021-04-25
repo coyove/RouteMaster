@@ -1,3 +1,4 @@
+from MapExport import exportMapDataImage
 from SvgPackage import load_package
 import json
 import time
@@ -13,14 +14,14 @@ from PyQt5.QtWidgets import (QApplication, QFileDialog, QGraphicsScale,
 
 from Common import APP_NAME, PNG_POLYFILLS
 from Map import Map
-from MapData import MapData, SvgSource
+from MapData import MapData, MapDataElement, SvgSource
 from Property import Property
 from Svg import SvgBar, SvgSearch
 
 globalSvgSources: typing.List[SvgSource] = None
 
 class Window(QMainWindow):
-    def __init__(self, mpq):
+    def __init__(self):
         super().__init__()
 
         self.searcher = SvgSearch('block')
@@ -72,12 +73,14 @@ class Window(QMainWindow):
         
         self.topMenus = {}
         self._addMenu('&File', '&New', 'Ctrl+N', self.doNew)
-        self._addMenu('&File', '&New Window', 'Ctrl+Shift+N', lambda x: mpq.put(1))
+        # self._addMenu('&File', '&New Window', 'Ctrl+Shift+N', lambda x: mpq.put(1))
         self._addMenu('&File', '-')
         self._addMenu('&File', '&Open', 'Ctrl+O', self.doOpen)
         self._addMenu('&File', '-')
         self._addMenu('&File', '&Save', 'Ctrl+S', self.doSave)
         self._addMenu('&File', '&Save As...', 'Ctrl+Shift+S', self.doSaveAs)
+        self._addMenu('&File', '-')
+        self._addMenu('&File', '&Export PNG...', '', self.doExportPNG)
 
         self._addMenu('&Edit', '&Undo', '', lambda x: self.mapview.actUndoRedo())
         self._addMenu('&Edit', '&Redo', '', lambda x: self.mapview.actUndoRedo(redo=True))
@@ -108,7 +111,7 @@ class Window(QMainWindow):
         self.searchResults.update(results)
         
     def ghostHoldSvgSource(self, s):
-        self.mapview.ghostHold([MapData.Element(s)])
+        self.mapview.ghostHold([MapDataElement(s)])
         
     def _askSave(self):
         if self.mapview.data.historyCap:
@@ -152,6 +155,16 @@ class Window(QMainWindow):
             self.save(fn)
         except Exception as e:
             QMessageBox(QMessageBox.Icon.Warning, 'Save', 'Failed to save {}: {}'.format(fn, e)).exec_()
+
+    def doExportPNG(self, v):
+        d = QFileDialog(self)
+        fn, _ = d.getSaveFileName(filter='PNG Files (*.png)')
+        if not fn:
+            return
+        try:
+            exportMapDataImage(self, fn, self.mapview.data, self.mapview.svgBoxes)
+        except Exception as e:
+            QMessageBox(QMessageBox.Icon.Warning, 'Export', 'Failed to export {}: {}'.format(fn, e)).exec_()
             
     def load(self, fn: str):
         d: MapData = self.mapview.data
@@ -160,7 +173,7 @@ class Window(QMainWindow):
             d.clearHistory()
             d.data = {}
             for c in fd['data']:
-                el = MapData.Element.fromdict(c)
+                el = MapDataElement.fromdict(c)
                 if el:
                     d.data[(el.x, el.y)] = el
             # self.mapview.pan(0, 0)
@@ -207,24 +220,8 @@ class Window(QMainWindow):
             fileOpen.setShortcut(shortcut)
         fileOpen.triggered.connect(cb)
         
-# print(len(PNG_POLYFILLS))
-def start(q):
-    QApplication.setStyle('fusion')
-    app = QApplication([])
-    win = Window(q)
-    app.exec_()
-    
-if __name__ == '__main__':
-    load_package('../../block.zip')
-    mp.freeze_support()
-    mp.set_start_method('spawn')
-    q = mp.Queue()
-    mp.Process(target=start, args=(q,)).start()
-    while True:
-        try:
-            q.get(timeout=1)
-            mp.Process(target=start, args=(q,)).start()
-        except:
-            if not mp.active_children():
-                break
-    print('server exited')
+QApplication.setStyle('fusion')
+app = QApplication([])
+load_package('../../block.zip')
+win = Window()
+app.exec_()

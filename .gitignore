@@ -9,3 +9,5 @@ dist
 block
 icon*
 *.bsm
+*.app
+*.png

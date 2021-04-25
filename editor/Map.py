@@ -1,3 +1,4 @@
+from Svg import SvgSource
 import math
 import random
 import typing
@@ -9,7 +10,7 @@ from PyQt5.QtWidgets import (QApplication, QInputDialog, QLineEdit, QMainWindow,
 
 from Common import BS
 from Controller import DragController, HoverController, Selection
-from MapData import MapCell, MapData, SvgSource
+from MapData import MapCell, MapData, MapDataElement
 from Parser import parseBS
 
 
@@ -17,7 +18,7 @@ def mod(x, y):
     return x - int(x/y) * y
 
 class Map(QWidget):
-    def __init__(self, parent, sources: typing.List[SvgSource] = None):
+    def __init__(self, parent, sources):
         super().__init__(parent)
         
         self.data = MapData(self)
@@ -36,7 +37,7 @@ class Map(QWidget):
             l = int(random.random() * 15 + 10)
             d = random.random() * math.pi * 2
             x, y = int(l * math.cos(d)), int(l * math.sin(d))
-            el = MapData.Element(sources[random.randrange(0, len(sources))])
+            el = MapDataElement(sources[random.randrange(0, len(sources))])
             if random.random() > 0.9:
                 el.cascades.append(sources[random.randrange(0, len(sources))])
             if random.random() > 0.8:
@@ -48,7 +49,7 @@ class Map(QWidget):
         self.hover = HoverController(self)
         self.svgBoxes = []
         self.svgBoxesRecycle = []
-        self.currentData: MapData.Element = None
+        self.currentData: MapDataElement = None
         self.viewOrigin = [0, 0]
         self.pan(0, 0) # fill svgBoxes
         self.setMouseTracking(True)
@@ -147,7 +148,7 @@ class Map(QWidget):
         x, y = rr(x_), rr(y_)
         if x_ == x or y_ == y: # special case: cursor on edge, no cell found
             return None, None, pt
-        d = self.data.get(x, y) or MapData.Element(x = x, y = y)
+        d = self.data.get(x, y) or MapDataElement(x = x, y = y)
         if iy >= len(self.svgBoxes) or ix >= len(self.svgBoxes[iy]):
             return None, None, pt
         cell = self.svgBoxes[iy][ix]
@@ -207,7 +208,7 @@ class Map(QWidget):
             q = a0.key() == QtCore.Qt.Key.Key_Q 
             c = a0.key() == QtCore.Qt.Key.Key_1
             for l in self.hover.labels:
-                l: MapData.Element
+                l: MapDataElement
                 r = SvgSource.tryRotate(l.src.svgId, q=q, c1234=c)
                 if r:
                     l.src = SvgSource.getcreate(r, SvgSource.Search.path + "/" + r, BS, BS)
@@ -246,7 +247,7 @@ class Map(QWidget):
 
         if text.startswith("{"):
             for s in text.split('\t'):
-                d: MapData.Element = MapData.Element.unpack(s)
+                d: MapDataElement = MapDataElement.unpack(s)
                 if d and d.src and d.src.svgId:
                     c.append(d)
                 else:
@@ -259,14 +260,14 @@ class Map(QWidget):
                     if not d:
                         continue
                     if isinstance(d, list):
-                        el = MapData.Element.createFromIdsAt(self, x, y, d[0], d[1:])
+                        el = MapDataElement.createFromIdsAt(self, x, y, d[0], d[1:])
                         el and c.append(el)
                     else:
-                        el = MapData.Element.createFromIdsAt(self, x, y, d, [])
+                        el = MapDataElement.createFromIdsAt(self, x, y, d, [])
                         if el:
                             c.append(el)
                         elif c:
-                            el: MapData.Element = c[-1]
+                            el: MapDataElement = c[-1]
                             el.text, el.textAlign, el.textPlacement = d, 'l', 'r'
 
         if bad:
@@ -295,7 +296,7 @@ class Map(QWidget):
                 self.selector.addSelection(d, propertyPanel=False)
         self.findMainWin().propertyPanel.update()
     
-    def ghostHold(self, c: typing.List[MapData.Element]):
+    def ghostHold(self, c: typing.List[MapDataElement]):
         self.data.begin()
         self.selector.clear()
         self.hover.hold(c)

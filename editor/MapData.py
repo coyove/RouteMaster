@@ -10,93 +10,92 @@ from PyQt5.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen
 from Common import BS
 from Svg import SvgSource
 
-
-class MapData:
-    class Element:
-        def createFromIdsAt(parent, x, y, id, ids):
-            id, fn = SvgSource.Search.guess(id)
-            if id:
-                el = MapData.Element(SvgSource.getcreate(id, fn, BS, BS), x, y)
-                for id in ids:
-                    id, fn = SvgSource.Search.guess(id)
-                    if id:
-                        el.cascades.append(SvgSource.getcreate(id, fn, BS, BS))
-                return el
-            return None
-
-        def __init__(self, d: SvgSource = None, x = 0, y = 0) -> None:
-            self.src = d
-            self.cascades: typing.List[SvgSource] = []
-            self.x, self.y = x, y
-            self.text = ''
-            self.textSize = 12
-            self.textPlacement = 't'
-            self.textAlign = 'c'
-            self.textFont = 'Times New Roman'
-            self.textX = self.textY = 0
-            
-        def valid(self):
-            return self and self.src
-        
-        def __str__(self) -> str:
-            return self.src and "({})".format(self.src.svgId) or "(empty)"
-        
-        def get(self, t):
-            return getattr(self, t)
-        
-        def set(self, k, v):
-            return setattr(self, k, v)
-        
-        def dup(self):
-            tmp, tmpc = self.src, self.cascades
-            self.src, self.cascades = None, None
-            obj = copy.deepcopy(self)
-            self.src, obj.src = tmp, tmp
-            self.cascades, obj.cascades = tmpc, tmpc
-            return obj
-        
-        def todict(self):
-            if self.src and not self.src.svgId:
-                qDebug('strange: empty svg source')
-            return {
-                "x": self.x,
-                "y": self.y,
-                "svgId": self.src and self.src.svgId or "",
-                "cascadeSvgIds": list(map(lambda x: x.svgId, self.cascades)),
-                "text": self.text,
-                "textSize": self.textSize,
-                "textPlacement": self.textPlacement,
-                "textAlign": self.textAlign,
-                "textFont": self.textFont,
-                "textX": self.textX,
-                "textY": self.textY,
-            }
-
-        def fromdict(x):
-            el = MapData.Element(SvgSource.get(x["svgId"]), x["x"], x["y"])
-            el.cascades = list(filter(lambda x: x, list(map(lambda x: SvgSource.Manager.get(x), x["cascadeSvgIds"]))))
-            el.text = x["text"]
-            el.textPlacement = x["textPlacement"]
-            el.textAlign = x["textAlign"]
-            el.textSize = x["textSize"]
-            el.textX = x["textX"]
-            el.textY = x["textY"]
-            el.textFont = x["textFont"]
+class MapDataElement:
+    def createFromIdsAt(parent, x, y, id, ids):
+        id, fn = SvgSource.Search.guess(id)
+        if id:
+            el = MapDataElement(SvgSource.getcreate(id, fn, BS, BS), x, y)
+            for id in ids:
+                id, fn = SvgSource.Search.guess(id)
+                if id:
+                    el.cascades.append(SvgSource.getcreate(id, fn, BS, BS))
             return el
+        return None
+
+    def __init__(self, d: SvgSource = None, x = 0, y = 0) -> None:
+        self.src = d
+        self.cascades: typing.List[SvgSource] = []
+        self.x, self.y = x, y
+        self.text = ''
+        self.textSize = 12
+        self.textPlacement = 't'
+        self.textAlign = 'c'
+        self.textFont = 'Times New Roman'
+        self.textX = self.textY = 0
         
-        def pack(self):
-            return json.dumps(self.todict())
-        
-        def unpack(data):
-            try:
-                return MapData.Element.fromdict(json.loads(data))
-            except Exception as e:
-                qDebug('unpack:' + str(e))
-                return None
-            
+    def valid(self):
+        return self and self.src
+    
+    def __str__(self) -> str:
+        return self.src and "({})".format(self.src.svgId) or "(empty)"
+    
+    def get(self, t):
+        return getattr(self, t)
+    
+    def set(self, k, v):
+        return setattr(self, k, v)
+    
+    def dup(self):
+        tmp, tmpc = self.src, self.cascades
+        self.src, self.cascades = None, None
+        obj = copy.deepcopy(self)
+        self.src, obj.src = tmp, tmp
+        self.cascades, obj.cascades = tmpc, tmpc
+        return obj
+    
+    def todict(self):
+        if self.src and not self.src.svgId:
+            qDebug('strange: empty svg source')
+        return {
+            "x": self.x,
+            "y": self.y,
+            "svgId": self.src and self.src.svgId or "",
+            "cascadeSvgIds": list(map(lambda x: x.svgId, self.cascades)),
+            "text": self.text,
+            "textSize": self.textSize,
+            "textPlacement": self.textPlacement,
+            "textAlign": self.textAlign,
+            "textFont": self.textFont,
+            "textX": self.textX,
+            "textY": self.textY,
+        }
+
+    def fromdict(x):
+        el = MapDataElement(SvgSource.get(x["svgId"]), x["x"], x["y"])
+        el.cascades = list(filter(lambda x: x, list(map(lambda x: SvgSource.Manager.get(x), x["cascadeSvgIds"]))))
+        el.text = x["text"]
+        el.textPlacement = x["textPlacement"]
+        el.textAlign = x["textAlign"]
+        el.textSize = x["textSize"]
+        el.textX = x["textX"]
+        el.textY = x["textY"]
+        el.textFont = x["textFont"]
+        return el
+    
+    def pack(self):
+        return json.dumps(self.todict())
+    
+    def unpack(data):
+        try:
+            return MapDataElement.fromdict(json.loads(data))
+        except Exception as e:
+            qDebug('unpack:' + str(e))
+            return None
+    
+class MapData: 
     def __init__(self, parent) -> None:
         self.parent = parent
-        self.data: typing.Dict[typing.Tuple(int, int), MapData.Element] = {}
+        self.data: typing.Dict[typing.Tuple(int, int), MapDataElement] = {}
         self.history = []
         self.historyCap = 0
         
@@ -105,16 +104,16 @@ class MapData:
         self.historyCap = 0
         self.parent.findMainWin().propertyPanel.update()
     
-    def put(self, x: int, y: int, d: Element):
+    def put(self, x: int, y: int, d: MapDataElement):
         self._appendHistory(self._put(x, y, d), d, x, y)
 
-    def _put(self, x: int, y: int, d: Element) -> Element:
+    def _put(self, x: int, y: int, d: MapDataElement) -> MapDataElement:
         d.x, d.y = x, y
         old = (x, y) in self.data and self.data[(x, y)] or None
         self.data[(x, y)] = d
         return old
 
-    def get(self, x: int, y: int) -> Element:
+    def get(self, x: int, y: int) -> MapDataElement:
         return (x, y) in self.data and self.data[(x, y)] or None
     
     def bbox(self) -> QRect:
@@ -131,13 +130,13 @@ class MapData:
     def delete(self, x: int, y: int):
         self._appendHistory(self._delete(x, y), None, x, y)
 
-    def _delete(self, x: int, y: int) -> Element:
+    def _delete(self, x: int, y: int) -> MapDataElement:
         old = (x, y) in self.data and self.data[(x, y)] or None
         if (x, y) in self.data:
             del self.data[(x, y)]
         return old
     
-    def _appendHistory(self, h: Element, rev: Element, delx = 0, dely = 0):
+    def _appendHistory(self, h, rev, delx = 0, dely = 0):
         hs = h is None and 'delete:{}:{}'.format(delx, dely) or h.pack() # rewind
         revs = rev is None and 'delete:{}:{}'.format(delx, dely) or rev.pack() # forward
         self._appendHistoryPacked(hs, revs)
@@ -182,14 +181,14 @@ class MapData:
             xy = h[7:].split(':')
             self._delete(int(xy[0]), int(xy[1]))
         else:
-            d = MapData.Element.unpack(h)
+            d = MapDataElement.unpack(h)
             self._put(d.x, d.y, d)
 
 class MapCell:
     selectedTextPen = QPen(QColor(0, 0, 255, 120)) 
     
     def __init__(self, parent) -> None:
-        self.current: MapData.Element = None
+        self.current: MapDataElement = None
         self.currentScale = 1.0
         self.moving = False
         self.parent = parent
@@ -248,7 +247,7 @@ class MapCell:
                 p.drawText(r, text, option=option)
                 p.restore()
         
-    def loadResizeMove(self, data: MapData.Element, scale: float, x: int, y: int):
+    def loadResizeMove(self, data: MapDataElement, scale: float, x: int, y: int):
         self.current = data
         self.currentScale = scale
         # super().load(data.svgData)
