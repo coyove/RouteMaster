@@ -8,7 +8,7 @@ def parseBS(s: str):
         return ''
 
     rows = []
-    s = s.replace('~~', '\\')
+    s = s.replace('~~', '\\').replace('! !', '\\')
     while i < len(s):
         if s[i] == '\\':
             i = i + 1

@@ -255,20 +255,29 @@ class Map(QWidget):
         else:
             rows = parseBS(text)
             for y in range(len(rows)):
-                for x in range(len(rows[y])):
+                x = 0
+                while x < len(rows[y]):
                     d = rows[y][x]
                     if not d:
+                        x = x + 1
                         continue
-                    if isinstance(d, list):
-                        el = MapDataElement.createFromIdsAt(self, x, y, d[0], d[1:])
-                        el and c.append(el)
-                    else:
-                        el = MapDataElement.createFromIdsAt(self, x, y, d, [])
-                        if el:
-                            c.append(el)
-                        elif c:
-                            el: MapDataElement = c[-1]
-                            el.text, el.textAlign, el.textPlacement = d, 'l', 'r'
+                    el = MapDataElement.createFromIdsAt(self, x, y, d)
+                    if el:
+                        c.append(el)
+                    elif x == 0:
+                        for xx in range(1, len(rows[y])):
+                            el = MapDataElement.createFromIdsAt(self, x, y, rows[y][xx])
+                            if el:
+                                el.text, el.textAlign, el.textPlacement = d, 'r', 'l'
+                                c.append(el)
+                                rows[y][0:xx] = []
+                                break
+                            else:
+                                d = d + rows[y][xx]
+                    elif c:
+                        el: MapDataElement = c[-1]
+                        el.text, el.textAlign, el.textPlacement = d, 'l', 'r'
+                    x = x + 1
 
         if bad:
             QMessageBox(QMessageBox.Icon.Warning, "Paste",

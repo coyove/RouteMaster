@@ -12,7 +12,7 @@ from PyQt5.QtWidgets import (QApplication, QFileDialog, QGraphicsDropShadowEffec
                              QMenu, QMessageBox, QPushButton, QSplitter,
                              QStatusBar, QVBoxLayout, QWidget)
 
-from Common import APP_NAME, PNG_POLYFILLS
+from Common import APP_NAME, ICON_PACKAGE, PNG_POLYFILLS
 from Map import Map
 from MapData import MapData, MapDataElement, SvgSource
 from Property import Property
@@ -81,7 +81,9 @@ class Window(QMainWindow):
         self._addMenu('&File', '&Save As...', 'Ctrl+Shift+S', self.doSaveAs)
         self._addMenu('&File', '-')
         self._addMenu('&File', '&Export PNG...', '', lambda x: self.doExportPngSvg(png=True))
-        self._addMenu('&File', '&Export SVG...', '', lambda x: self.doExportPngSvg(png=False))
+        self._addMenu('&File', 'E&xport SVG...', '', lambda x: self.doExportPngSvg(png=False))
+        self._addMenu('&File', '-')
+        self._addMenu('&File', '&Refresh Icons Package', '', lambda x: load_package(ICON_PACKAGE, force=True))
 
         self._addMenu('&Edit', '&Undo', '', lambda x: self.mapview.actUndoRedo())
         self._addMenu('&Edit', '&Redo', '', lambda x: self.mapview.actUndoRedo(redo=True))
@@ -105,7 +107,9 @@ class Window(QMainWindow):
         exportMapDataSvg(self, '11.svg', self.mapview.data)
         
     def closeEvent(self, a0: QtGui.QCloseEvent) -> None:
-        self._askSave()
+        if not self._askSave():
+            a0.ignore()
+            return
         return super().closeEvent(a0)
         
     def updateSearches(self):
@@ -119,11 +123,17 @@ class Window(QMainWindow):
         
     def _askSave(self):
         if self.mapview.data.historyCap:
-            if QMessageBox.question(self, "Save", "Save current file?") == QMessageBox.StandardButton.Yes:
+            ans = QMessageBox.question(self, "Save", "Save current file?",
+                                       buttons=QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel)
+            if ans == QMessageBox.StandardButton.Cancel:
+                return False
+            if ans == QMessageBox.StandardButton.Yes:
                 self.doSave(True)
+        return True
                 
     def doNew(self, v):
-        self._askSave()
+        if not self._askSave():
+            return
         d = self.mapview.data
         d.clearHistory()
         d.data = {}
@@ -132,7 +142,8 @@ class Window(QMainWindow):
         self._updateCurrentFile('')
        
     def doOpen(self, v):
-        self._askSave()
+        if not self._askSave():
+            return
         d = QFileDialog(self)
         fn , _ = d.getOpenFileName(filter='BSM Files (*.bsm)')
         if not fn:
@@ -230,6 +241,6 @@ class Window(QMainWindow):
         
 QApplication.setStyle('fusion')
 app = QApplication([])
-load_package('../../block.zip')
+load_package(ICON_PACKAGE)
 win = Window()
 app.exec_()

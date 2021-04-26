@@ -1,5 +1,6 @@
 import os
 
+ICON_PACKAGE = '../../block.zip'
 
 BS = 32
 

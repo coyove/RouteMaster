@@ -19,7 +19,7 @@ class Loader(QMainWindow):
 
         self.bar = QProgressBar(w)
         self.bar.show()
-        box.addWidget(QLabel("Loading blocks, you can close to skip and resume next time"), 1)
+        box.addWidget(QLabel("Loading blocks, you can close to skip and redo later"), 1)
         box.addWidget(self.bar, 1)
 
         self.setCentralWidget(w) 
@@ -29,8 +29,8 @@ class Loader(QMainWindow):
         self.loading.start()
         self.loading.taskFinished.connect(lambda: self.close())
 
-        r = QApplication.desktop().screenGeometry()
-        self.move((r.width() - self.width()) // 2, (r.height() - self.height()) // 2)
+        # r = QApplication.desktop().screenGeometry()
+        # self.move((r.width() - self.width()) // 2, (r.height() - self.height()) // 2)
 
         self.installEventFilter(self)
 
@@ -82,9 +82,9 @@ class LoaderTask(QtCore.QThread):
             f.close()
         self.taskFinished.emit()
 
-def load_package(path):
+def load_package(path, force=False):
     os.makedirs('block', exist_ok=True)
-    if os.path.isfile('block/finished'):
+    if os.path.isfile('block/finished') and not force:
         return
 
     w = Loader(path)

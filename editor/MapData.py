@@ -13,14 +13,15 @@ from Common import BS
 from Svg import SvgSource
 
 class MapDataElement:
-    def createFromIdsAt(parent, x, y, id, ids):
-        id, fn = SvgSource.Search.guess(id)
-        if id:
-            el = MapDataElement(SvgSource.getcreate(id, fn, BS, BS), x, y)
-            for id in ids:
-                id, fn = SvgSource.Search.guess(id)
-                if id:
-                    el.cascades.append(SvgSource.getcreate(id, fn, BS, BS))
+    def createFromIdsAt(parent, x, y, id):
+        sid, fn = SvgSource.Search.guess(id[0] if isinstance(id, list) else id)
+        if sid:
+            el = MapDataElement(SvgSource.getcreate(sid, fn, BS, BS), x, y)
+            if isinstance(id, list):
+                for id in id[1:]:
+                    sid, fn = SvgSource.Search.guess(id)
+                    if sid:
+                        el.cascades.append(SvgSource.getcreate(sid, fn, BS, BS))
             return el
         return None
 

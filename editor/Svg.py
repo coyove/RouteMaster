@@ -30,6 +30,8 @@ class SvgSearch:
                 self.files[n.lower()] = n
                 
     def guess(self, s: str):
+        if not s:
+            return "", ""
         if s.endswith('.svg'):
             return s, self.fullpath(s)
         p = "bsicon_" + _quote(s).lower() + ".svg"
