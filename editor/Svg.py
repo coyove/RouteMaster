@@ -6,7 +6,7 @@ import typing
 
 from PyQt5 import QtGui
 from PyQt5 import QtCore, QtSvg
-from PyQt5.QtGui import QColor, QFont, QFontMetrics, QPainter, QPixmap
+from PyQt5.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen, QPixmap
 from PyQt5.QtWidgets import QListView, QMainWindow, QPushButton, QTableWidget, QTableWidgetItem, QToolBar, QWidget 
 from urllib.parse import quote, unquote
 from Common import BS, PNG_POLYFILLS
@@ -156,6 +156,8 @@ class SvgSource:
         
 class SvgBar(QWidget):
     size = 64
+    dragPen = QPen(QColor(0, 0, 0, 255))
+    dragPen.setWidth(3)
 
     def __init__(self, parent):
         super().__init__(parent)
@@ -165,6 +167,7 @@ class SvgBar(QWidget):
         self.setMouseTracking(True)
         self.setFocusPolicy(QtCore.Qt.FocusPolicy.ClickFocus)
         self.onDelete = None
+        self.onDrag = None
         self.update([])
     
     def cells(self):
@@ -180,6 +183,8 @@ class SvgBar(QWidget):
         self.files = files
         self.page = 0
         self.currentHover = -1
+        self.currentDragFrom = -1
+        self.currentDragTo = -1
         self.refresh()
         
     def resizeEvent(self, a0: QtGui.QResizeEvent) -> None:
@@ -200,6 +205,11 @@ class SvgBar(QWidget):
             p.save()
             if i == self.currentHover:
                 p.fillRect(x, 0, SvgBar.size, SvgBar.size * 1.5, QColor(0, 0, 0, 40))
+            if i == self.currentDragTo:
+                p.save()
+                p.setPen(SvgBar.dragPen)
+                p.drawLine(x + 1, 0, x + 1, SvgBar.size * 1.5)
+                p.restore()
             p.drawText(QtCore.QRectF(x + 4, SvgBar.size, SvgBar.size - 8, SvgBar.size / 2),
                        unquote(s.svgId.replace('bsicon_', '').replace('.svg', '').replace('BSicon_', '')), option=opt)
             p.restore()
@@ -220,13 +230,27 @@ class SvgBar(QWidget):
     
     def mousePressEvent(self, a0: QtGui.QMouseEvent) -> None:
         self.currentHover = a0.x() // SvgBar.size
+        if a0.buttons() & QtCore.Qt.MouseButton.RightButton:
+            self.currentDragFrom = self.currentHover
+            return super().mousePressEvent(a0)
         if self.currentHover < len(self.sources) and not self.onDelete:
             self.findMainWin().ghostHoldSvgSource(self.sources[self.currentHover])
             self.findMainWin().mapview.setFocus()
         self.repaint()
         return super().mousePressEvent(a0)
+
+    def mouseMoveEvent(self, a0: QtGui.QMouseEvent) -> None:
+        if self.currentDragFrom != -1 and self.onDrag:
+            self.currentDragTo = a0.x() // SvgBar.size
+            self.repaint()
+        return super().mouseMoveEvent(a0)
     
     def mouseReleaseEvent(self, a0: QtGui.QMouseEvent) -> None:
+        self.dragPos = None
+        if self.onDrag and self.currentDragFrom != -1 and self.currentDragTo != -1 and self.currentDragTo != self.currentDragFrom:
+            df, dt = self.currentDragFrom + self.page, self.currentDragTo + self.page
+            self.onDrag(df, dt)
+        self.currentDragFrom = self.currentDragTo = -1
         self.repaint()
         return super().mouseReleaseEvent(a0)
     

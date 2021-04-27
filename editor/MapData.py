@@ -15,6 +15,12 @@ from Svg import SvgSource
 class MapDataElement:
     def createFromIdsAt(parent, x, y, id):
         sid, fn = SvgSource.Search.guess(id[0] if isinstance(id, list) else id)
+        if not sid and isinstance(id, list):
+            for i in range(1, len(id)):
+                sid, fn = SvgSource.Search.guess(id[i])
+                if sid:
+                    id = id[i+1:]
+                    break
         if sid:
             el = MapDataElement(SvgSource.getcreate(sid, fn, BS, BS), x, y)
             if isinstance(id, list):
@@ -75,7 +81,7 @@ class MapDataElement:
 
     def fromdict(x):
         el = MapDataElement(SvgSource.get(x["svgId"]), x["x"], x["y"])
-        el.cascades = list(filter(lambda x: x, list(map(lambda x: SvgSource.Manager.get(x), x["cascadeSvgIds"]))))
+        el.cascades = list(filter(lambda x: x, list(map(lambda x: SvgSource.get(x), x["cascadeSvgIds"]))))
         el.text = x["text"]
         el.textPlacement = x["textPlacement"]
         el.textAlign = x["textAlign"]
@@ -279,6 +285,7 @@ class MapCell:
 
             text = self.current.text
             r, option = self.current.textbbox(scale, self.posx, self.posy)
+            # print(text)
             p.drawText(QRectF(r.x(), r.y(), r.width(), r.height()), text, option=QtGui.QTextOption(option))
             p.restore()
 

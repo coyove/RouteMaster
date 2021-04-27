@@ -1,12 +1,14 @@
+from Common import WIN_WIDTH
 import typing
 
 from PyQt5 import QtCore
 from PyQt5.QtGui import QFontDatabase
-from PyQt5.QtWidgets import (QComboBox, QHBoxLayout, QLabel, QMainWindow,
+from PyQt5.QtWidgets import (QComboBox, QDialog, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QPushButton,
                              QScrollArea, QSizePolicy, QSpinBox, QTextEdit,
                              QVBoxLayout, QWidget)
 
-from Svg import SvgBar, SvgSource
+from MapData import MapData, MapDataElement
+from Svg import SvgBar, SvgSearch, SvgSource
 
 
 class Property(QWidget):
@@ -29,6 +31,7 @@ class Property(QWidget):
         self.cascades = SvgBar(self)
         self.cascades.setVisible(False)
         self.cascades.onDelete = self.deleteCascade
+        self.cascades.onDrag = self.resortCascade
         self.textAttrBox.addWidget(self.cascades)
         
         self.svgId = QLabel('N/A', self)
@@ -111,7 +114,7 @@ class Property(QWidget):
                 self.oldTextStore.append(x.dup())
         if a1.type() == QtCore.QEvent.FocusOut and a0 is self.text:
             for x in self.selection():
-                self.findMainWin().mapview.data._appendHistory(self.oldTextStore.pop(0), x)
+                self._getMapData()._appendHistory(self.oldTextStore.pop(0), x)
             self.oldTextStore.clear()
         return super().eventFilter(a0, a1)
 
@@ -128,14 +131,43 @@ class Property(QWidget):
         for x in self.selection():
             x.text = self.text.toPlainText()
         self.findMainWin().mapview.pan(0, 0)
+
+    def _getMapData(self) -> MapData:
+        return self.findMainWin().mapview.data
         
     def deleteCascade(self, idx: int):
+        self._getMapData().begin()
         item = self.selection()[0]
+        old = item.pack()
         if idx == 0:
             item.src = item.cascades[0]
             item.cascades = item.cascades[1:]
         else:
             item.cascades = item.cascades[:idx-1] + item.cascades[idx-1+1:]
+        self._getMapData()._appendHistoryPacked(old, item.pack())
+        self.findMainWin().mapview.setFocus()
+        self.update()
+
+    def resortCascade(self, fr: int, to: int):
+        self._getMapData().begin()
+        item: MapDataElement = self.selection()[0]
+        old = item.pack()
+        if to == 0:
+            fr = fr - 1
+            old = item.src
+            item.src = item.cascades[fr]
+            item.cascades = [old] + item.cascades[:fr] + item.cascades[fr + 1:]
+        elif fr == 0:
+            old = item.src
+            item.src = item.cascades[0]
+            item.cascades = item.cascades[1:to] + [old] + item.cascades[to:]
+        else:
+            fr, to = fr - 1, to - 1
+            fold = item.cascades[fr]
+            item.cascades = item.cascades[:fr] + item.cascades[fr + 1:]
+            item.cascades = item.cascades[:to] + [fold] + item.cascades[to:]
+        self._getMapData()._appendHistoryPacked(old, item.pack())
+        self.findMainWin().mapview.setFocus()
         self.update()
         
     def _foreach(self, f):
@@ -213,3 +245,46 @@ class Property(QWidget):
             if w.itemData(i) == d:
                 w.setCurrentIndex(i)
                 break
+
+class FileProperty(QDialog):
+    def __init__(self, parent: typing.Optional[QWidget], meta: dict) -> None:
+        super().__init__(parent=parent)
+        self.meta = meta
+        box = QVBoxLayout(self)
+        box.addWidget(QLabel('Author'))
+        self.author = QLineEdit(self)
+        self.author.setText(meta.get("author"))
+        box.addWidget(self.author)
+
+        self.desc = QTextEdit(self)
+        self.desc.setText(meta.get("desc"))
+        box.addWidget(QLabel('Description'))
+        box.addWidget(self.desc, 20)
+
+        data: MapData = parent.mapview.data
+        missings = []
+        for v in data.data.values():
+            if not v.src.svgId.lower() in SvgSource.Search.files:
+                missings.append(v.src.svgId)
+            for s in v.cascades:
+                if not s.svgId.lower() in SvgSource.Search.files:
+                    missings.append(s.svgId)
+
+        if missings:
+            box.addWidget(QLabel('Missing Blocks'))
+            self.missing = QTextEdit(self)
+            self.missing.setReadOnly(True)
+            self.missing.setStyleSheet("background: transparent")
+            self.missing.setText('\n'.join(missings))
+            box.addWidget(self.missing, 1)
+
+        self.ok = QPushButton("OK", self)
+        self.ok.clicked.connect(self.onOK)
+        box.addWidget(self.ok)
+
+        self.setFixedWidth(WIN_WIDTH)
+    
+    def onOK(self, v):
+        self.meta["author"] = self.author.text()
+        self.meta["desc"] = self.desc.toPlainText()
+        self.close()

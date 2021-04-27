@@ -265,6 +265,7 @@ class Map(QWidget):
                     if el:
                         c.append(el)
                     elif x == 0:
+                        d = str(d)
                         for xx in range(1, len(rows[y])):
                             el = MapDataElement.createFromIdsAt(self, x, y, rows[y][xx])
                             if el:
@@ -273,10 +274,10 @@ class Map(QWidget):
                                 rows[y][0:xx] = []
                                 break
                             else:
-                                d = d + rows[y][xx]
+                                d = d + str(rows[y][xx])
                     elif c:
                         el: MapDataElement = c[-1]
-                        el.text, el.textAlign, el.textPlacement = d, 'l', 'r'
+                        el.text, el.textAlign, el.textPlacement = str(d), 'l', 'r'
                     x = x + 1
 
         if bad:

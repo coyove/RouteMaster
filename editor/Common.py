@@ -2,9 +2,13 @@ import os
 
 ICON_PACKAGE = '../../block.zip'
 
+WIN_WIDTH = 300
+
 BS = 32
 
 APP_NAME = 'RouteMaster'
+
+APP_VERSION = '0.1.0'
 
 # these svg files cannot be rendered properly by Qt
 PNG_POLYFILLS = set(filter(lambda x: x.strip(), """

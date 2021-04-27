@@ -1,3 +1,5 @@
+import sys
+import argparse
 from MapExport import exportMapDataPng, exportMapDataSvg
 from SvgPackage import load_package
 import json
@@ -7,18 +9,43 @@ import multiprocessing as mp
 from zipfile import ZipInfo
 
 from PyQt5 import QtCore, QtGui
-from PyQt5.QtWidgets import (QApplication, QFileDialog, QGraphicsDropShadowEffect, QGraphicsScale,
-                             QHBoxLayout, QLabel, QLineEdit, QMainWindow,
+from PyQt5.QtWidgets import (QAction, QApplication, QDialog, QFileDialog,
+                             QHBoxLayout, QLabel, QLayout, QLineEdit, QMainWindow,
                              QMenu, QMessageBox, QPushButton, QSplitter,
                              QStatusBar, QVBoxLayout, QWidget)
 
-from Common import APP_NAME, ICON_PACKAGE, PNG_POLYFILLS
+from Common import APP_NAME, APP_VERSION, ICON_PACKAGE, PNG_POLYFILLS, WIN_WIDTH
 from Map import Map
 from MapData import MapData, MapDataElement, SvgSource
-from Property import Property
+from Property import FileProperty, Property
 from Svg import SvgBar, SvgSearch
 
 globalSvgSources: typing.List[SvgSource] = None
+
+class About(QDialog):
+    def __init__(self, parent: typing.Optional[QWidget]) -> None:
+        super().__init__(parent=parent)
+        self.setFixedWidth(WIN_WIDTH)
+        box = QVBoxLayout(self)
+        box.addWidget(QLabel('{} (v{})'.format(APP_NAME, APP_VERSION)))
+        box.addWidget(QLabel('Simple route designer using BSicon'))
+
+        def _link(url, text=None): 
+            l = QLabel(self)
+            l.setText("<a href=\"{}\">{}<a>".format(url, text or url));
+            l.setTextFormat(QtCore.Qt.TextFormat.RichText)
+            l.setTextInteractionFlags(QtCore.Qt.TextInteractionFlag.TextBrowserInteraction);
+            l.setOpenExternalLinks(True);
+            return l
+
+        box.addWidget(_link("https://commons.wikimedia.org/wiki/BSicon/Guide"))
+        box.addWidget(_link("https://github.com/coyove/train", "{} on Github".format(APP_NAME)))
+
+        btn = QPushButton('OK', self)
+        btn.clicked.connect(lambda: self.close())
+        btn.setFixedSize(btn.sizeHint())
+        box.addWidget(btn)# alignment=QtCore.Qt.AlignmentFlag.AlignRight)
+        self.setFixedSize(self.sizeHint())
 
 class Window(QMainWindow):
     def __init__(self):
@@ -83,7 +110,9 @@ class Window(QMainWindow):
         self._addMenu('&File', '&Export PNG...', '', lambda x: self.doExportPngSvg(png=True))
         self._addMenu('&File', 'E&xport SVG...', '', lambda x: self.doExportPngSvg(png=False))
         self._addMenu('&File', '-')
-        self._addMenu('&File', '&Refresh Icons Package', '', lambda x: load_package(ICON_PACKAGE, force=True))
+        self._addMenu('&File', '&File Properties...', '', lambda x: FileProperty(self, self.fileMeta).exec_())
+        self._addMenu('&File', '-')
+        self._addMenu('&File', '&Load Icons Package...', '', lambda x: load_package(force=True))
 
         self._addMenu('&Edit', '&Undo', '', lambda x: self.mapview.actUndoRedo())
         self._addMenu('&Edit', '&Redo', '', lambda x: self.mapview.actUndoRedo(redo=True))
@@ -100,11 +129,33 @@ class Window(QMainWindow):
         self._addMenu('&View', 'Center &Selected', 'Ctrl+Shift+H', lambda x: self.mapview.center(selected=True))
         self._addMenu('&View', '100% &Zoom', '', lambda x: self.mapview.center(resetzoom=True))
 
+        self._addMenu('&Help', '&About', '', lambda x: About(self).exec_()).setMenuRole(QAction.MenuRole.AboutRole)
+
         self.propertyPanel.update()
         self.showMaximized()
 
-        self.load('123.bsm')
-        exportMapDataSvg(self, '11.svg', self.mapview.data)
+        self.fileMeta = {}
+        self.resetFileMeta = lambda: self.__dict__.setdefault("fileMeta", { "author": APP_NAME, "desc": "Created by " + APP_NAME })
+        self.resetFileMeta()
+
+        ap = argparse.ArgumentParser()
+        ap.add_argument('file', nargs="?")
+        ap.add_argument('-c', '--convert', help="output PNG/SVG")
+        ap.add_argument('--png-scale', help="output PNG scale", type=int, default=1)
+        args = ap.parse_args()
+
+        if args.file:
+            self.load(args.file)
+
+        if args.convert:
+            self.setVisible(False)
+            if args.convert.endswith('.svg'):
+                exportMapDataSvg(self, args.convert, self.mapview.data)
+            else:
+                self.mapview.scale = float(args.png_scale)
+                exportMapDataPng(self, args.convert, self.mapview.data)
+            print('Sucessfully export to {}'.format(args.convert))
+            sys.exit(0)
         
     def closeEvent(self, a0: QtGui.QCloseEvent) -> None:
         if not self._askSave():
@@ -140,6 +191,7 @@ class Window(QMainWindow):
         self.mapview.scale = 2
         self.mapview.center()
         self._updateCurrentFile('')
+        self.resetFileMeta()
        
     def doOpen(self, v):
         if not self._askSave():
@@ -198,6 +250,8 @@ class Window(QMainWindow):
             # self.mapview.pan(0, 0)
             self.mapview.center()
             self._updateCurrentFile(fn)
+            self.fileMeta["author"] = fd.get("author")
+            self.fileMeta["desc"] = fd.get("desc")
     
     def save(self, fn: str):
         d: MapData = self.mapview.data
@@ -211,8 +265,10 @@ class Window(QMainWindow):
                     continue
                 z.append(dd.todict())
             json.dump({
-                "author": "test",
+                "author": self.fileMeta.get("author"),
+                "desc": self.fileMeta.get("desc"),
                 "ts": int(time.time()),
+                "ver": 1,
                 "data": z,
             }, f)
             d.clearHistory()
@@ -238,6 +294,7 @@ class Window(QMainWindow):
         if shortcut:
             fileOpen.setShortcut(shortcut)
         fileOpen.triggered.connect(cb)
+        return fileOpen
         
 QApplication.setStyle('fusion')
 app = QApplication([])

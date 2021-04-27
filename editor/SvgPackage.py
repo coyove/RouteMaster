@@ -1,11 +1,13 @@
-from PyQt5.QtGui import QColor, QIcon, QPixmap, QWindow
-from Common import APP_NAME
-import time
 import os
+import time
 import zipfile
-from PyQt5 import QtCore
 
-from PyQt5.QtWidgets import QApplication, QLabel, QMainWindow, QProgressBar, QVBoxLayout, QWidget
+from PyQt5 import QtCore
+from PyQt5.QtWidgets import (QApplication, QFileDialog, QLabel, QMainWindow,
+                             QProgressBar, QVBoxLayout, QWidget)
+
+from Common import APP_NAME
+
 
 class Loader(QMainWindow):
     def __init__(self, path):
@@ -69,7 +71,7 @@ class LoaderTask(QtCore.QThread):
                 r = zf.open(file) 
                 with open(os.path.join('block', fn), 'wb+') as w:
                     while True:
-                        buf = r.read(1024)
+                        buf = r.read(4096)
                         if not buf:
                             break
                         w.write(buf)
@@ -82,10 +84,15 @@ class LoaderTask(QtCore.QThread):
             f.close()
         self.taskFinished.emit()
 
-def load_package(path, force=False):
+def load_package(path=None, force=False):
     os.makedirs('block', exist_ok=True)
     if os.path.isfile('block/finished') and not force:
         return
+
+    if not path:
+        path, _ = QFileDialog.getOpenFileName(filter="Zip File (*.zip)")
+        if not path:
+            return
 
     w = Loader(path)
     w.show()
