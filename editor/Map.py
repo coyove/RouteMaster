@@ -10,7 +10,7 @@ from PyQt5 import QtCore
 from PyQt5.QtWidgets import (QApplication, QInputDialog, QLineEdit,
                              QMainWindow, QMessageBox, QWidget, qApp)
 
-from Common import BS, TR, VISUALIZE_OP
+from Common import BS, TR
 from Controller import DragController, HoverController, Selection
 from MapData import MapCell, MapData, MapDataElement
 from Parser import parseBS
@@ -88,16 +88,15 @@ class Map(QWidget):
             s, e = self.pressPosPath[i], self.pressPosPath[i < len(self.pressPosPath) - 1 and i + 1 or 0]
             p.drawLine(s[0], s[1], e[0], e[1])
 
-        if VISUALIZE_OP:
-            vis = []
-            QApplication.queryKeyboardModifiers() & QtCore.Qt.KeyboardModifier.ControlModifier and vis.append('\u2318' if sys.platform == 'darwin' else 'Ctrl')
-            QApplication.queryKeyboardModifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier and vis.append("Shift")
-            QApplication.mouseButtons() & QtCore.Qt.MouseButton.LeftButton and vis.append("^L")
-            QApplication.mouseButtons() & QtCore.Qt.MouseButton.MidButton and vis.append("^M")
-            QApplication.mouseButtons() & QtCore.Qt.MouseButton.RightButton and vis.append("^R")
-            if vis:
-                p.setFont(Map.BigFont())
-                p.drawText(0, Map.BigFont().pointSize(), '-'.join(vis))
+        vis = []
+        QApplication.queryKeyboardModifiers() & QtCore.Qt.KeyboardModifier.ControlModifier and vis.append('\u2318' if sys.platform == 'darwin' else 'Ctrl')
+        QApplication.queryKeyboardModifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier and vis.append("Shift")
+        QApplication.mouseButtons() & QtCore.Qt.MouseButton.LeftButton and vis.append("^L")
+        QApplication.mouseButtons() & QtCore.Qt.MouseButton.MidButton and vis.append("^M")
+        QApplication.mouseButtons() & QtCore.Qt.MouseButton.RightButton and vis.append("^R")
+        if vis:
+            p.setFont(Map.BigFont())
+            p.drawText(0, Map.BigFont().pointSize(), '-'.join(vis))
 
         p.end()
         return super().paintEvent(a0)

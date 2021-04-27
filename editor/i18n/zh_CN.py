@@ -55,7 +55,7 @@ dict = {
     "Overview": "概览",
     "Bounding": "边界",
     "Text Bounding": "文字边界",
-    "Total Blocks": "总量",
+    "Total Blocks": "块总数",
 
     "[Untitled]": "[未命名]",
 

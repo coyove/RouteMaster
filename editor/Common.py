@@ -1,3 +1,4 @@
+import argparse
 import collections
 import os
 import time
@@ -18,7 +19,7 @@ LOGS = collections.deque(maxlen=5000)
 
 START_TIME = time.time()
 
-VISUALIZE_OP = True
+AP = argparse.ArgumentParser()
 
 # these svg files cannot be rendered properly by Qt
 PNG_POLYFILLS = set(filter(lambda x: x.strip(), """

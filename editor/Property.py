@@ -292,19 +292,22 @@ class FileProperty(QDialog):
         overview.addItem(TR('Text Bounding') + ": " + rectStr(data.bbox(includeText=True)))
         tabs.addTab(overview, TR('Overview'))
 
-        self.all = QTextEdit('\n'.join(list(dedup)), self)
+        self.all = QTextEdit(self)
+        self.all.setText('\n'.join(list(dedup)))
         self.all.setReadOnly(True)
         tabs.addTab(self.all, TR('All Blocks'))
 
-        self.missing = QTextEdit('\n'.join(missings), self)
+        self.missing = QTextEdit(self)
+        self.missing.setText('\n'.join(missings))
         self.missing.setReadOnly(True)
         tabs.addTab(self.missing, TR('Missing Blocks'))
 
-        self.polyfills = QTextEdit('\n'.join(polyfills), self)
-        self.polyfills.setReadOnly(True)
+        self.polyfills = QTextEdit(self)
+        self.polyfills.setText('\n'.join(polyfills))
+        self.missing.setReadOnly(True)
         tabs.addTab(self.polyfills, TR('Block Polyfills'))
 
-        box.addWidget(tabs, 5)
+        box.addWidget( tabs,5)
 
         self.ok = QPushButton(TR("OK"), self)
         self.ok.clicked.connect(self.onOK)

@@ -12,8 +12,8 @@ from PyQt5.QtWidgets import (QAction, QApplication, QDialog, QFileDialog,
                              QMainWindow, QMenu, QMessageBox, QPushButton,
                              QSplitter, QStatusBar, QTextEdit, QVBoxLayout, QWidget)
 
-from Common import (APP_NAME, APP_VERSION, ICON_PACKAGE, LANG, LOGS, PNG_POLYFILLS, START_TIME, TR,
-                    WIN_WIDTH)
+from Common import (AP, APP_NAME, APP_VERSION, ICON_PACKAGE,
+                    LANG, LOGS,  START_TIME, TR, WIN_WIDTH)
 from Map import Map
 from MapData import MapData, MapDataElement, SvgSource
 from MapExport import exportMapDataPng, exportMapDataSvg
@@ -22,6 +22,11 @@ from Svg import SvgBar, SvgSearch
 from SvgPackage import load_package
 
 globalSvgSources: typing.List[SvgSource] = None
+AP.add_argument('file', nargs="?")
+AP.add_argument('-c', '--convert', help="output PNG/SVG")
+AP.add_argument('--png-scale', help="output PNG scale", type=int, default=1)
+# AP.add_argument('--show-keys', help="show modifier keys", action="store_true")
+args = AP.parse_args()
 
 class Logger(QDialog):
     def __init__(self, parent: typing.Optional[QWidget]) -> None:
@@ -156,12 +161,6 @@ class Window(QMainWindow):
         self.fileMeta = {}
         self.resetFileMeta = lambda: self.__dict__.setdefault("fileMeta", { "author": APP_NAME, "desc": "Created by " + APP_NAME })
         self.resetFileMeta()
-
-        ap = argparse.ArgumentParser()
-        ap.add_argument('file', nargs="?")
-        ap.add_argument('-c', '--convert', help="output PNG/SVG")
-        ap.add_argument('--png-scale', help="output PNG scale", type=int, default=1)
-        args = ap.parse_args()
 
         if args.file:
             self.load(args.file)
