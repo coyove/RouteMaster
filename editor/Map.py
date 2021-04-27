@@ -1,23 +1,32 @@
-from Svg import SvgSource
+import json
 import math
 import random
+import sys
 import typing
+from json.decoder import JSONDecodeError
 
 import PyQt5.QtGui as QtGui
 from PyQt5 import QtCore
-from PyQt5.QtWidgets import (QApplication, QInputDialog, QLineEdit, QMainWindow, QMessageBox,
-                             QWidget)
+from PyQt5.QtWidgets import (QApplication, QInputDialog, QLineEdit,
+                             QMainWindow, QMessageBox, QWidget, qApp)
 
-from Common import BS
+from Common import BS, TR, VISUALIZE_OP
 from Controller import DragController, HoverController, Selection
 from MapData import MapCell, MapData, MapDataElement
 from Parser import parseBS
+from Svg import SvgSource
 
 
 def mod(x, y):
     return x - int(x/y) * y
 
 class Map(QWidget):
+    import functools
+
+    @functools.cache
+    def BigFont():
+        return QtGui.QFont(QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.SystemFont.FixedFont).family(), 16)
+
     def __init__(self, parent, sources):
         super().__init__(parent)
         
@@ -78,6 +87,18 @@ class Map(QWidget):
         for i in range(0, len(self.pressPosPath)):
             s, e = self.pressPosPath[i], self.pressPosPath[i < len(self.pressPosPath) - 1 and i + 1 or 0]
             p.drawLine(s[0], s[1], e[0], e[1])
+
+        if VISUALIZE_OP:
+            vis = []
+            QApplication.queryKeyboardModifiers() & QtCore.Qt.KeyboardModifier.ControlModifier and vis.append('\u2318' if sys.platform == 'darwin' else 'Ctrl')
+            QApplication.queryKeyboardModifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier and vis.append("Shift")
+            QApplication.mouseButtons() & QtCore.Qt.MouseButton.LeftButton and vis.append("^L")
+            QApplication.mouseButtons() & QtCore.Qt.MouseButton.MidButton and vis.append("^M")
+            QApplication.mouseButtons() & QtCore.Qt.MouseButton.RightButton and vis.append("^R")
+            if vis:
+                p.setFont(Map.BigFont())
+                p.drawText(0, Map.BigFont().pointSize(), '-'.join(vis))
+
         p.end()
         return super().paintEvent(a0)
     
@@ -163,6 +184,10 @@ class Map(QWidget):
     def selectionEvent(self, action=None, d=None):
         # print(d)
         self.findMainWin().barSelection.setText(self.selector.status())
+
+    def keyReleaseEvent(self, a0: QtGui.QKeyEvent) -> None:
+        self.repaint()
+        return super().keyReleaseEvent(a0)
         
     def keyPressEvent(self, a0: QtGui.QKeyEvent) -> None:
         if a0.key() == QtCore.Qt.Key.Key_Delete:
@@ -212,8 +237,8 @@ class Map(QWidget):
                 r = SvgSource.tryRotate(l.src.svgId, q=q, c1234=c)
                 if r:
                     l.src = SvgSource.getcreate(r, SvgSource.Search.path + "/" + r, BS, BS)
-            self.repaint() 
 
+        self.repaint() 
         return super().keyPressEvent(a0)
     
     def actDelete(self):
@@ -233,8 +258,8 @@ class Map(QWidget):
     def actCopy(self):
         s = []
         for l in self.selector.labels:
-            s.append(l.data.pack())
-        QtGui.QGuiApplication.clipboard().setText("\t".join(s))
+            s.append(l.data.todict())
+        QtGui.QGuiApplication.clipboard().setText(json.dumps(s))
         
     def actCut(self):
         self.actCopy()
@@ -245,14 +270,14 @@ class Map(QWidget):
         text = QtGui.QGuiApplication.clipboard().text()
         bad = False
 
-        if text.startswith("{"):
-            for s in text.split('\t'):
-                d: MapDataElement = MapDataElement.unpack(s)
+        try:
+            for s in json.loads(text):
+                d: MapDataElement = MapDataElement.fromdict(s)
                 if d and d.src and d.src.svgId:
                     c.append(d)
                 else:
                     bad = True
-        else:
+        except JSONDecodeError:
             rows = parseBS(text)
             for y in range(len(rows)):
                 x = 0
@@ -280,9 +305,9 @@ class Map(QWidget):
                         el.text, el.textAlign, el.textPlacement = str(d), 'l', 'r'
                     x = x + 1
 
-        if bad:
-            QMessageBox(QMessageBox.Icon.Warning, "Paste",
-                        c and "Invalid blocks have been filtered ({} remain)".format(len(c)) or "No valid blocks to paste").exec_()
+        if bad or len(c) == 0:
+            QMessageBox(QMessageBox.Icon.Warning, TR("Paste"),
+                        c and TR("__paste_filter_invalid_blocks__").format(len(c)) or TR("__paste_no_valid_blocks__")).exec_()
 
         if len(c):
             self.ghostHold(c)
@@ -296,7 +321,7 @@ class Map(QWidget):
         self.pan(0, 0)
         
     def actSelectByText(self):
-        x, ok = QInputDialog.getText(self, 'Select by Text', 'Text:')
+        x, ok = QInputDialog.getText(self, TR('Select by Text'), TR('Text:'))
         if not ok or not x:
             return 
         self.selector.clear()

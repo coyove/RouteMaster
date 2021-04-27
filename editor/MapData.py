@@ -80,16 +80,20 @@ class MapDataElement:
         }
 
     def fromdict(x):
-        el = MapDataElement(SvgSource.get(x["svgId"]), x["x"], x["y"])
-        el.cascades = list(filter(lambda x: x, list(map(lambda x: SvgSource.get(x), x["cascadeSvgIds"]))))
-        el.text = x["text"]
-        el.textPlacement = x["textPlacement"]
-        el.textAlign = x["textAlign"]
-        el.textSize = x["textSize"]
-        el.textX = x["textX"]
-        el.textY = x["textY"]
-        el.textFont = x["textFont"]
-        return el
+        try:
+            el = MapDataElement(SvgSource.get(x["svgId"]), x["x"], x["y"])
+            el.cascades = list(filter(lambda x: x, list(map(lambda x: SvgSource.get(x), x["cascadeSvgIds"]))))
+            el.text = x["text"]
+            el.textPlacement = x["textPlacement"]
+            el.textAlign = x["textAlign"]
+            el.textSize = x["textSize"]
+            el.textX = x["textX"]
+            el.textY = x["textY"]
+            el.textFont = x["textFont"]
+            return el
+        except KeyError:
+            qDebug("fromdict invalid key: " + json.dumps(x))
+            return None
     
     def pack(self):
         return json.dumps(self.todict())
@@ -169,6 +173,8 @@ class MapData:
         return (x, y) in self.data and self.data[(x, y)] or None
     
     def bbox(self, includeText=False) -> QRect:
+        if not self.data:
+            return QRect()
         maxx, maxy = -sys.maxsize, -sys.maxsize
         minx, miny = sys.maxsize, sys.maxsize
         def merge(x, y):

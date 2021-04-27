@@ -1,14 +1,24 @@
+import collections
 import os
+import time
+
+from PyQt5.QtCore import QLocale
 
 ICON_PACKAGE = '../../block.zip'
 
-WIN_WIDTH = 300
+WIN_WIDTH = 400
 
 BS = 32
 
 APP_NAME = 'RouteMaster'
 
 APP_VERSION = '0.1.0'
+
+LOGS = collections.deque(maxlen=5000)
+
+START_TIME = time.time()
+
+VISUALIZE_OP = True
 
 # these svg files cannot be rendered properly by Qt
 PNG_POLYFILLS = set(filter(lambda x: x.strip(), """
@@ -747,3 +757,20 @@ if __name__ == '__main__':
             if f in PNG_POLYFILLS:
                 continue
             os.remove("../../block/" + f.removesuffix(".svg") + ".png")
+
+
+from i18n import *
+
+LANG = QLocale.system().name()
+
+TEST = os.environ.get('RM_TEST') == '1'
+
+def TR(text):
+    g = globals()
+    x = g[LANG if LANG in g else 'en'].dict
+    if text in x:
+        return x[text]
+    
+    if TEST:
+        print('"{}": "", # not translated'.format(text))
+    return text

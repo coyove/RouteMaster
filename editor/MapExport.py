@@ -1,8 +1,10 @@
 from os import curdir
-from MapData import MapCell, MapData
-from PyQt5.QtWidgets import QMessageBox
 
 from PyQt5.QtGui import QImage, QPainter
+from PyQt5.QtWidgets import QMessageBox
+
+from MapData import MapCell, MapData
+
 
 def exportMapDataPng(parent, fn: str, data: MapData):
     # QInputDialog.getInt(parent=parent, title='Block size', label='Pixels', value=32, min=16, max

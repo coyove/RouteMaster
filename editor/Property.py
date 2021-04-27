@@ -1,12 +1,15 @@
-from Common import WIN_WIDTH
+import re
 import typing
 
 from PyQt5 import QtCore
 from PyQt5.QtGui import QFontDatabase
-from PyQt5.QtWidgets import (QComboBox, QDialog, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QPushButton,
-                             QScrollArea, QSizePolicy, QSpinBox, QTextEdit,
-                             QVBoxLayout, QWidget)
+from PyQt5.QtWidgets import (QComboBox, QDialog, QHBoxLayout, QLabel,
+                             QLineEdit, QListWidget, QMainWindow, QPushButton,
+                             QScrollArea, QSizePolicy, QSpinBox, QTableWidget,
+                             QTableWidgetItem, QTabWidget, QTextEdit,
+                             QTreeView, QVBoxLayout, QWidget)
 
+from Common import PNG_POLYFILLS, TR, WIN_WIDTH
 from MapData import MapData, MapDataElement
 from Svg import SvgBar, SvgSearch, SvgSource
 
@@ -35,10 +38,10 @@ class Property(QWidget):
         self.textAttrBox.addWidget(self.cascades)
         
         self.svgId = QLabel('N/A', self)
-        self.textAttrBox.addWidget(self._title('Type'))
+        self.textAttrBox.addWidget(self._title(TR('Type')))
         self.textAttrBox.addWidget(self.svgId)
 
-        self.textAttrBox.addWidget(self._title('Text'))
+        self.textAttrBox.addWidget(self._title(TR('Text')))
         self.text = QTextEdit(self)
         self.text.textChanged.connect(self.textChanged)
         self.text.installEventFilter(self)
@@ -61,19 +64,19 @@ class Property(QWidget):
                 self.textSize.addItem(str(i))
         self.textSize.currentIndexChanged.connect(self.sizeChanged)
         self.textSize.setEditable(True)
-        self._addBiBoxInTextAttrBox(self._title("Font Family"), self.textFont, self._title("Font Size"), self.textSize)
+        self._addBiBoxInTextAttrBox(self._title(TR("Font Family")), self.textFont, self._title(TR("Font Size")), self.textSize)
         
         self.textAlign = QComboBox(self)
         self.textPlace = QComboBox(self)
         for c in [self.textAlign, self.textPlace]:
-            c.addItem('Center', 'c')
-            c.addItem('Top', 't')
-            c.addItem('Bottom', 'b')
-            c.addItem('Left', 'l')
-            c.addItem('Right', 'r')
+            c.addItem(TR('Center'), 'c')
+            c.addItem(TR('Top'), 't')
+            c.addItem(TR('Bottom'), 'b')
+            c.addItem(TR('Left'), 'l')
+            c.addItem(TR('Right'), 'r')
         self.textAlign.currentIndexChanged.connect(self.alignChanged)
         self.textPlace.currentIndexChanged.connect(self.placeChanged)
-        self._addBiBoxInTextAttrBox(self._title("Alignment"), self.textAlign, self._title("Placement"), self.textPlace)
+        self._addBiBoxInTextAttrBox(self._title(TR("Alignment")), self.textAlign, self._title(TR("Placement")), self.textPlace)
         
         self.textX = QSpinBox(self)
         self.textY = QSpinBox(self)
@@ -83,7 +86,7 @@ class Property(QWidget):
             c.setMaximum(1e5)
         self.textX.valueChanged.connect(lambda e: self.offsetChanged('x', e))
         self.textY.valueChanged.connect(lambda e: self.offsetChanged('y', e))
-        self._addBiBoxInTextAttrBox(self._title("Offset X"), self.textX, self._title("Offset Y"), self.textY)
+        self._addBiBoxInTextAttrBox(self._title(TR("Offset X")), self.textX, self._title(TR("Offset Y")), self.textY)
 
         # self.setLayout(self.textAttrBox)
         self.scrollView.setWidget(self.textAttr)
@@ -251,35 +254,61 @@ class FileProperty(QDialog):
         super().__init__(parent=parent)
         self.meta = meta
         box = QVBoxLayout(self)
-        box.addWidget(QLabel('Author'))
+        box.addWidget(QLabel(TR('Author')))
         self.author = QLineEdit(self)
         self.author.setText(meta.get("author"))
         box.addWidget(self.author)
 
         self.desc = QTextEdit(self)
         self.desc.setText(meta.get("desc"))
-        box.addWidget(QLabel('Description'))
-        box.addWidget(self.desc, 20)
+        box.addWidget(QLabel(TR('Description')))
+        box.addWidget(self.desc, 5)
 
         data: MapData = parent.mapview.data
-        missings = []
+        total, dedup, missings, polyfills = 0, set(), [], []
         for v in data.data.values():
             if not v.src.svgId.lower() in SvgSource.Search.files:
                 missings.append(v.src.svgId)
+            if v.src.svgId in PNG_POLYFILLS:
+                polyfills.append(v.src.svgId)
+            dedup.add(v.src.svgId)
+            total = total + 1
             for s in v.cascades:
                 if not s.svgId.lower() in SvgSource.Search.files:
                     missings.append(s.svgId)
+                if s.svgId in PNG_POLYFILLS:
+                    polyfills.append(s.svgId)
+                dedup.add(s.svgId)
+                total = total + 1
 
-        if missings:
-            box.addWidget(QLabel('Missing Blocks'))
-            self.missing = QTextEdit(self)
-            self.missing.setReadOnly(True)
-            self.missing.setStyleSheet("background: transparent")
-            self.missing.setText('\n'.join(missings))
-            box.addWidget(self.missing, 1)
+        tabs = QTabWidget(self)
 
-        self.ok = QPushButton("OK", self)
+        def rectStr(r: QtCore.QRect):
+            return "({}, {})-({}, {})".format(r.x(), r.y(), r.width() + r.x(), r.height() + r.y())
+
+        overview = QListWidget(self)
+        overview.addItem(TR('Total Blocks') + ": " + str(total))
+        overview.addItem(TR('Bounding') + ": " + rectStr(data.bbox()))
+        overview.addItem(TR('Text Bounding') + ": " + rectStr(data.bbox(includeText=True)))
+        tabs.addTab(overview, TR('Overview'))
+
+        self.all = QTextEdit('\n'.join(list(dedup)), self)
+        self.all.setReadOnly(True)
+        tabs.addTab(self.all, TR('All Blocks'))
+
+        self.missing = QTextEdit('\n'.join(missings), self)
+        self.missing.setReadOnly(True)
+        tabs.addTab(self.missing, TR('Missing Blocks'))
+
+        self.polyfills = QTextEdit('\n'.join(polyfills), self)
+        self.polyfills.setReadOnly(True)
+        tabs.addTab(self.polyfills, TR('Block Polyfills'))
+
+        box.addWidget(tabs, 5)
+
+        self.ok = QPushButton(TR("OK"), self)
         self.ok.clicked.connect(self.onOK)
+        self.ok.setFixedSize(self.ok.sizeHint())
         box.addWidget(self.ok)
 
         self.setFixedWidth(WIN_WIDTH)
