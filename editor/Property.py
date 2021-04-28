@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import (QComboBox, QDialog, QHBoxLayout, QLabel,
                              QTableWidgetItem, QTabWidget, QTextEdit,
                              QTreeView, QVBoxLayout, QWidget)
 
-from Common import PNG_POLYFILLS, TR, WIN_WIDTH
+from Common import APP_NAME, PNG_POLYFILLS, TR, WIN_WIDTH
 from MapData import MapData, MapDataElement
 from Svg import SvgBar, SvgSearch, SvgSource
 
@@ -252,6 +252,7 @@ class Property(QWidget):
 class FileProperty(QDialog):
     def __init__(self, parent: typing.Optional[QWidget], meta: dict) -> None:
         super().__init__(parent=parent)
+        self.setWindowTitle(APP_NAME)
         self.meta = meta
         box = QVBoxLayout(self)
         box.addWidget(QLabel(TR('Author')))
@@ -265,19 +266,19 @@ class FileProperty(QDialog):
         box.addWidget(self.desc, 5)
 
         data: MapData = parent.mapview.data
-        total, dedup, missings, polyfills = 0, set(), [], []
+        total, dedup, missings, polyfills = 0, set(), set(), set()
         for v in data.data.values():
             if not v.src.svgId.lower() in SvgSource.Search.files:
-                missings.append(v.src.svgId)
+                missings.add(v.src.svgId)
             if v.src.svgId in PNG_POLYFILLS:
-                polyfills.append(v.src.svgId)
+                polyfills.add(v.src.svgId)
             dedup.add(v.src.svgId)
             total = total + 1
             for s in v.cascades:
                 if not s.svgId.lower() in SvgSource.Search.files:
-                    missings.append(s.svgId)
+                    missings.add(s.svgId)
                 if s.svgId in PNG_POLYFILLS:
-                    polyfills.append(s.svgId)
+                    polyfills.add(s.svgId)
                 dedup.add(s.svgId)
                 total = total + 1
 
@@ -293,7 +294,7 @@ class FileProperty(QDialog):
         tabs.addTab(overview, TR('Overview'))
 
         self.all = QTextEdit(self)
-        self.all.setText('\n'.join(list(dedup)))
+        self.all.setText('\n'.join(dedup))
         self.all.setReadOnly(True)
         tabs.addTab(self.all, TR('All Blocks'))
 

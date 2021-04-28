@@ -31,6 +31,7 @@ args = AP.parse_args()
 class Logger(QDialog):
     def __init__(self, parent: typing.Optional[QWidget]) -> None:
         super().__init__(parent=parent)
+        self.setWindowTitle(APP_NAME)
         box = QVBoxLayout(self)
         log = QTextEdit('\n'.join(LOGS), self)
         log.setReadOnly(True)
@@ -45,6 +46,7 @@ class Logger(QDialog):
 class About(QDialog):
     def __init__(self, parent: typing.Optional[QWidget]) -> None:
         super().__init__(parent=parent)
+        self.setWindowTitle(APP_NAME)
         self.setFixedWidth(WIN_WIDTH)
         box = QVBoxLayout(self)
         box.addWidget(QLabel('{} (v{})'.format(APP_NAME, APP_VERSION)))

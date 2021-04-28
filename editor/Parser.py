@@ -33,6 +33,10 @@ def parseBS(s: str):
             if row[i] == 'leer':
                 row[i] = ''
 
+    for i in range(len(rows) - 1, -1, -1):
+        if len(rows[i]) == 1 and rows[i][0] == '':
+            del rows[i]
+
     return rows
     
 if __name__ == "__main__":
