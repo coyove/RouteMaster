@@ -88,6 +88,12 @@ class Property(QWidget):
         self.textY.valueChanged.connect(lambda e: self.offsetChanged('y', e))
         self._addBiBoxInTextAttrBox(self._title(TR("Offset X")), self.textX, self._title(TR("Offset Y")), self.textY)
 
+        self.textAttrBox.addWidget(self._title(TR('Overlay: Start X Percentage')))
+        self.startXOffset = QComboBox(self)
+        self.startXOffset.addItems(["0", "25", "50", "75"])
+        self.startXOffset.currentIndexChanged.connect(lambda e: self.offsetChanged('xo', int(self.startXOffset.currentText()) / 100))
+        self.textAttrBox.addWidget(self.startXOffset)
+
         # self.setLayout(self.textAttrBox)
         self.scrollView.setWidget(self.textAttr)
         box = QVBoxLayout()
@@ -187,7 +193,10 @@ class Property(QWidget):
         self._foreach(lambda x: x.set("textFont", self.textFont.itemText(e)))
         
     def offsetChanged(self, t, v):
-        self._foreach(lambda x: x.set(t == 'x' and 'textX' or 'textY', v))
+        if t == 'x' or t == 'y':
+            self._foreach(lambda x: x.set(t == 'x' and 'textX' or 'textY', v))
+        else:
+            self._foreach(lambda x: x.set("startXOffset", v))
         
     def sizeChanged(self, e):
         self._foreach(lambda x: x.set("textSize", int(self.textSize.itemText(e))))
@@ -241,6 +250,9 @@ class Property(QWidget):
         self.textSize.setEditText(str(e.textSize))
         self._setAP(self.textAlign, e.textAlign)
         self._setAP(self.textPlace, e.textPlacement)
+        self.textX.setValue(e.textX)
+        self.textY.setValue(e.textY)
+        self.startXOffset.setCurrentText(str(int(e.startXOffset * 100)))
         self.updating = False
         
     def _setAP(self, w: QComboBox, d):
@@ -301,14 +313,14 @@ class FileProperty(QDialog):
         self.missing = QTextEdit(self)
         self.missing.setText('\n'.join(missings))
         self.missing.setReadOnly(True)
-        tabs.addTab(self.missing, TR('Missing Blocks'))
+        tabs.addTab(self.missing, TR('Missings'))
 
         self.polyfills = QTextEdit(self)
         self.polyfills.setText('\n'.join(polyfills))
         self.missing.setReadOnly(True)
-        tabs.addTab(self.polyfills, TR('Block Polyfills'))
+        tabs.addTab(self.polyfills, TR('Polyfills'))
 
-        box.addWidget( tabs,5)
+        box.addWidget(tabs, 5)
 
         self.ok = QPushButton(TR("OK"), self)
         self.ok.clicked.connect(self.onOK)

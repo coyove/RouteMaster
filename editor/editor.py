@@ -1,6 +1,4 @@
-import argparse
 import json
-from math import trunc
 import os
 import sys
 import time
@@ -9,11 +7,12 @@ import typing
 from PyQt5 import QtCore, QtGui
 from PyQt5.QtWidgets import (QAction, QApplication, QDialog, QFileDialog,
                              QHBoxLayout, QLabel, QLayout, QLineEdit,
-                             QMainWindow, QMenu, QMessageBox, QPushButton,
-                             QSplitter, QStatusBar, QTextEdit, QVBoxLayout, QWidget)
+                             QListWidget, QMainWindow, QMenu, QMessageBox,
+                             QPushButton, QSplitter, QStatusBar, QTextEdit,
+                             QVBoxLayout, QWidget)
 
-from Common import (AP, APP_NAME, APP_VERSION, ICON_PACKAGE,
-                    LANG, LOGS,  START_TIME, TR, WIN_WIDTH)
+from Common import (AP, APP_NAME, APP_VERSION, ICON_PACKAGE, LANG, LOGS,
+                    NEW_LINE, START_TIME, TR, WIN_WIDTH, VDialog)
 from Map import Map
 from MapData import MapData, MapDataElement, SvgSource
 from MapExport import exportMapDataPng, exportMapDataSvg
@@ -27,28 +26,57 @@ AP.add_argument('-c', '--convert', help="output PNG/SVG")
 AP.add_argument('--png-scale', help="output PNG scale", type=int, default=1)
 # AP.add_argument('--show-keys', help="show modifier keys", action="store_true")
 args = AP.parse_args()
+logfile = open('logs.txt', 'ab+')
 
 class Logger(QDialog):
     def __init__(self, parent: typing.Optional[QWidget]) -> None:
         super().__init__(parent=parent)
         self.setWindowTitle(APP_NAME)
         box = QVBoxLayout(self)
-        log = QTextEdit('\n'.join(LOGS), self)
-        log.setReadOnly(True)
-        box.addWidget(log)
+        self.log = QListWidget(self)
+        self.log.addItems(LOGS)
+        self.log.setFont(QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.SystemFont.FixedFont))
+        box.addWidget(self.log)
+
+        w = QWidget(self)
+        hbox = QHBoxLayout(w)
         btn = QPushButton(TR('OK'), self)
         btn.clicked.connect(lambda: self.close())
         btn.setFixedSize(btn.sizeHint())
-        box.addWidget(btn)# alignment=QtCore.Qt.AlignmentFlag.AlignRight)
+        hbox.addWidget(btn)
+        btn = QPushButton(TR('Clear Logs') + ' ({:.2f}K)'.format(os.stat('logs.txt').st_size / 1024), self)
+        btn.clicked.connect(lambda: self.clearLog())
+        btn.setFixedSize(btn.sizeHint())
+        hbox.addWidget(btn)
+        btn = QPushButton(TR('Hide Debugs'), self)
+        btn.clicked.connect(lambda: self.nonDebugLog())
+        btn.setFixedSize(btn.sizeHint())
+        hbox.addWidget(btn)
+
+        box.addWidget(w)
         # self.setFixedSize(self.sizeHint())
         self.showMaximized()
+        self.log.scrollToBottom()
 
-class About(QDialog):
+    def clearLog(self):
+        global logfile
+        LOGS.clear()
+        self.log.clear()
+        logfile.close()
+        os.remove("logs.txt")
+        logfile = open('logs.txt', 'ab+')
+    
+    def nonDebugLog(self):
+        self.log.clear()
+        for i in LOGS:
+            if not i.startswith('0;'):
+                self.log.addItem(i)
+        self.log.scrollToBottom()
+
+class About(VDialog):
     def __init__(self, parent: typing.Optional[QWidget]) -> None:
         super().__init__(parent=parent)
-        self.setWindowTitle(APP_NAME)
-        self.setFixedWidth(WIN_WIDTH)
-        box = QVBoxLayout(self)
+        box = self.box
         box.addWidget(QLabel('{} (v{})'.format(APP_NAME, APP_VERSION)))
         box.addWidget(QLabel(TR('__about__')))
 
@@ -164,8 +192,7 @@ class Window(QMainWindow):
         self.resetFileMeta = lambda: self.__dict__.setdefault("fileMeta", { "author": APP_NAME, "desc": "Created by " + APP_NAME })
         self.resetFileMeta()
 
-        if args.file:
-            self.load(args.file)
+        self.load(args.file or '')
 
         if args.convert:
             self.setVisible(False)
@@ -227,11 +254,9 @@ class Window(QMainWindow):
             
     def doSave(self, v):
         if not self.currentFile:
-            d = QFileDialog(self)
-            self.currentFile, _ = d.getSaveFileName()
-            if not self.currentFile:
-                return
-        self.save(self.currentFile)
+            self.doSaveAs(True)
+        else:
+            self.save(self.currentFile)
         
     def doSaveAs(self, v):
         d = QFileDialog(self)
@@ -259,6 +284,16 @@ class Window(QMainWindow):
             
     def load(self, fn: str):
         d: MapData = self.mapview.data
+        crashfn = fn.removesuffix(".bsm") + ".crash.bsm"
+        delcrash = False
+        if os.path.exists(crashfn):
+            ans = QMessageBox.question(self, TR('Open'), TR('__open_crash__').format(crashfn))
+            if ans == QMessageBox.StandardButton.Yes:
+                fn, delcrash = crashfn, True
+            else:
+                os.remove(crashfn)
+        if not os.path.exists(fn):
+            return
         with open(fn, 'rb') as f:
             fd = json.load(f)
             d.clearHistory()
@@ -272,6 +307,8 @@ class Window(QMainWindow):
             self._updateCurrentFile(fn)
             self.fileMeta["author"] = fd.get("author")
             self.fileMeta["desc"] = fd.get("desc")
+        if delcrash:
+            os.remove(crashfn)
     
     def save(self, fn: str):
         d: MapData = self.mapview.data
@@ -318,18 +355,41 @@ class Window(QMainWindow):
         
 
 QApplication.setStyle('fusion')
-QtCore.qInstallMessageHandler(lambda a, b, c: LOGS.append(("%.3f" % (time.time() - START_TIME)) + " " + c))
+
+def messagehandle(t: QtCore.QtMsgType, b, c):
+    msg: str = str(int(t)) + "; " + ("%.3f" % (time.time() - START_TIME)) + " " + c
+    LOGS.append(msg)
+    logfile.write(msg.encode('utf-8'))
+    logfile.write(NEW_LINE)
+    logfile.flush()
+QtCore.qInstallMessageHandler(messagehandle)
+QtCore.qDebug(time.strftime("[START] %m-%d-%Y %H:%M:%S"))
 
 app = QApplication([])
 trdir = QtCore.QLibraryInfo.location(QtCore.QLibraryInfo.LibraryLocation.TranslationsPath)
 tr = QtCore.QTranslator()
-
 if not os.path.exists(os.path.join(trdir, "qtbase_zh_CN")):
     import shutil
     shutil.copy2('i18n/qtbase_zh_CN.qm', os.path.join(trdir, "qtbase_zh_CN"))
-
 tr.load("qtbase_" + LANG, trdir)
 app.installTranslator(tr)
-load_package(ICON_PACKAGE)
+
 win = Window()
+def excepthook(exc_type, exc_value, exc_tb):
+    import traceback
+    msg = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
+    QtCore.qDebug(("exception:\n" + msg).encode('utf-8'))
+    print(msg)
+    global win
+    if win:
+        w = win
+        win = None # prevent dead loop
+        try:
+            w.save(w.currentFile.removesuffix(".bsm") + '.crash.bsm' if w.currentFile else '.crash.bsm')
+        except Exception as e:
+            QtCore.qDebug(("double exception in hook: {}".format(e)).encode('utf-8'))
+    app.quit()
+sys.excepthook = excepthook
+
+load_package(ICON_PACKAGE)
 app.exec_()

@@ -1,5 +1,5 @@
-from Parser import parseBS
 import json
+import random
 import re
 import math
 import typing
@@ -37,14 +37,14 @@ class SvgSearch:
         p = "bsicon_" + _quote(s).lower() + ".svg"
         if p in self.files:
             return self.files[p], self.fullpath(self.files[p])
+        QtCore.qDebug(("guess '" + s + u"' failed").encode('utf-8'))
         return "", ""
                 
     def fullpath(self, id: str):
         return self.path + "/" + id
         
     def search(self, q: str):
-        q = q.lower()
-
+        q = q.strip().lower()
         scores = {}
         for p in q.split(' '):
             if not p in self.data:
@@ -102,16 +102,17 @@ class SvgSource:
                 return check(id[:-1] + ".svg")
             return check(id + "q.svg")
         
-        if c1234:
-            for i in range(1, 16):
-                step = SvgSource._rotateStepper = SvgSource._rotateStepper + 1
-                for m in re.compile(r'\d').finditer(id):
-                    m: re.Match
-                    id = id[:m.start()] + str(step % 4 + 1) + id[m.end():]
-                    step = step / 4
-                f = check(id + ".svg")
-                if f:
-                    return f
+        # if c1234:
+        #     for i in range(1, 16):
+        #         step = SvgSource._rotateStepper = SvgSource._rotateStepper + 1
+        #         for m in re.compile(r'\d').finditer(id):
+        #             m: re.Match
+        #             print(id)
+        #             id = id[:m.start()] + str(step % 4 + 1) + id[m.end():]
+        #             step = step / 4
+        #         f = check(id + ".svg")
+        #         if f:
+        #             return f
 
         return
     
@@ -120,10 +121,12 @@ class SvgSource:
         self.svgId = id
         if id in PNG_POLYFILLS:
             self._renderer = QPixmap(svgData.removesuffix(".svg") + ".png")
+            self._ratio = self._renderer.width() / self._renderer.height()
         else:
-            self._renderer = QtSvg.QSvgWidget(SvgSource.Parent)
+            self._renderer = QtSvg.QSvgWidget(SvgSource.Parent) # SvgRenderer can't render, don't know why
             self._renderer.load(svgData)
             self._renderer.setVisible(False)
+            self._ratio = self._renderer.sizeHint().width() / self._renderer.sizeHint().height()
         self._w, self._h = w, h
         SvgSource.Manager[self.svgId] = self
         
@@ -143,7 +146,11 @@ class SvgSource:
         except Exception as e:
             QtCore.qDebug("SvgSource.source: {}".format(e))
     
-    def paint(self, x: int, y: int, w: int, h: int, p: QPainter, ghost=False):
+    def paint(self, x: int, y: int, w: int, h: int, p: QPainter, ghost=False, xOffsetPercent=0):
+        # print(xOffsetPercent, xOffsetPercent % 1)
+        xOffsetPercent = xOffsetPercent % 1
+        x = x + int(xOffsetPercent * w)
+        w = int(h * self._ratio)
         if isinstance(self._renderer, QPixmap):
             p.drawPixmap(x, y, w, h, self._renderer)
         else:
@@ -198,8 +205,14 @@ class SvgBar(QWidget):
             x = i * SvgBar.size
             s: SvgSource = self.sources[i]
             m = 8
-            s.paint(x + m, m, SvgBar.size - m*2, SvgBar.size - m*2, p)
-            p.drawRect(x + m, m, SvgBar.size - m*2, SvgBar.size - m*2)
+            if s._ratio > 1:
+                s.paint(x + m, m, (SvgBar.size - m*2) / 2, (SvgBar.size - m*2) / 2, p)
+                p.drawRect(x + m, m, SvgBar.size - m*2, (SvgBar.size - m*2) / 2)
+            else:
+                sz = SvgBar.size - m*2
+                w = sz * s._ratio
+                s.paint(x + (sz - w) / 2 + m, m, sz, sz, p)
+                p.drawRect(x + (sz - w) / 2 + m, m, w, sz)
             opt = QtGui.QTextOption(QtCore.Qt.AlignmentFlag.AlignCenter)
             opt.setWrapMode(QtGui.QTextOption.WrapMode.WrapAnywhere)
             p.save()

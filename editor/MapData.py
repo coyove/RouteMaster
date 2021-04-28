@@ -13,7 +13,7 @@ from Common import BS
 from Svg import SvgSource
 
 class MapDataElement:
-    def createFromIdsAt(parent, x, y, id):
+    def createWithXY(parent, x, y, id):
         sid, fn = SvgSource.Search.guess(id[0] if isinstance(id, list) else id)
         if not sid and isinstance(id, list):
             for i in range(1, len(id)):
@@ -41,6 +41,7 @@ class MapDataElement:
         self.textAlign = 'c'
         self.textFont = 'Times New Roman'
         self.textX = self.textY = 0
+        self.startXOffset = 0
         
     def valid(self):
         return self and self.src
@@ -77,6 +78,7 @@ class MapDataElement:
             "textFont": self.textFont,
             "textX": self.textX,
             "textY": self.textY,
+            "startXOffset": self.startXOffset,
         }
 
     def fromdict(x):
@@ -90,19 +92,20 @@ class MapDataElement:
             el.textX = x["textX"]
             el.textY = x["textY"]
             el.textFont = x["textFont"]
+            el.startXOffset = x.get("startXOffset", 0)
             return el
         except KeyError:
-            qDebug("fromdict invalid key: " + json.dumps(x))
+            qDebug(("fromdict invalid key: " + json.dumps(x)).encode('utf-8'))
             return None
     
     def pack(self):
         return json.dumps(self.todict())
     
-    def unpack(data):
+    def unpack(data: str):
         try:
             return MapDataElement.fromdict(json.loads(data))
         except Exception as e:
-            qDebug('unpack:' + str(e))
+            qDebug(('unpack ' + str(e) + ": " + data).encode("utf-8"))
             return None
 
     def textbbox(self, scale: float, x = 0, y = 0, measure=False):
@@ -269,6 +272,14 @@ class MapCell:
         self.current: MapDataElement = None
         self.moving = False
         self.parent = parent
+
+    def _paint(s: MapDataElement, x, y, w, h, p, ghost=False):
+        lastXOffset = s.startXOffset
+        s.src.paint(x, y, w, h, p, ghost=ghost, xOffsetPercent=lastXOffset)
+        lastXOffset = lastXOffset + s.src._ratio
+        for s in s.cascades:
+            s.paint(x, y, w, h, p, ghost=ghost, xOffsetPercent=lastXOffset)
+            lastXOffset = lastXOffset + s._ratio
         
     def paint(self, p: QPainter): 
         blockSize = self.parent._blocksize()
@@ -277,9 +288,7 @@ class MapCell:
         if self.moving and self.parent.currentData != self.current:
             p.drawRect(self.posx, self.posy, blockSize, blockSize)
         elif self.current:
-            self.current.src.paint(self.x, self.y, w, h, p)
-            for s in self.current.cascades:
-                s.paint(self.x, self.y, w, h, p)
+            MapCell._paint(self.current, self.x, self.y, w, h, p)
             if not self.current.text:
                 return
             font = MapCell.FontsManager.get(self.current.textFont, int(self.current.textSize * scale))

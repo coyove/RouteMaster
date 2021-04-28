@@ -9,7 +9,9 @@ from setuptools import setup
 
 APP = ['editor.py']
 DATA_FILES = []
-OPTIONS = {}
+OPTIONS = {
+    'packages': ['i18n'],
+}
 
 setup(
     app=APP,

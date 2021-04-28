@@ -1,4 +1,5 @@
 dict = {
+    "__open_crash__": 'Crash save {} exists, do you want to recover it?',
     "__about__": "Simple route designer using BSicon",
     "__export_fail__": 'Failed to export {}: {}',
     "__paste_no_valid_blocks__": "No valid blocks to paste",

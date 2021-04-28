@@ -34,7 +34,7 @@ class Selection:
             p.fillRect(posx, posy, bs, bs, QColor(255, 255, 0, l.oddeven() and 135 or 90))
             if x or y: # paint select-n-drag blocks if presented
                 el: MapDataElement = l.data
-                el.src.paint(posx + x, posy + y, bs, bs, p, ghost=True)
+                MapCell._paint(el, posx + x, posy + y, bs, bs, p, ghost=True)
         
     def addSelection(self, data: MapDataElement, propertyPanel = True):
         if not data.src:
@@ -93,9 +93,7 @@ class HoverController:
         for l in self.labels:
             el: MapDataElement = l
             xx, yy = (l.x - self.labels[0].x) * bs + x, (l.y - self.labels[0].y) * bs + y
-            el.src.paint(xx, yy, bs, bs, p, ghost=True)
-            for c in el.cascades:
-                c.paint(xx, yy, bs, bs, p, ghost=True)
+            MapCell._paint(el, xx, yy, bs, bs, p, ghost=True)
     
     def end(self, cascade):
         if len(self.labels) == 0:

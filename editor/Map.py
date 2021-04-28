@@ -270,7 +270,10 @@ class Map(QWidget):
         bad = False
 
         try:
-            for s in json.loads(text):
+            l = json.loads(text)
+            if not isinstance(l, list):
+                raise JSONDecodeError('', '', 0)
+            for s in l:
                 d: MapDataElement = MapDataElement.fromdict(s)
                 if d and d.src and d.src.svgId:
                     c.append(d)
@@ -278,23 +281,27 @@ class Map(QWidget):
                     bad = True
         except JSONDecodeError:
             rows = parseBS(text)
+            rowsEl, maxRowWidth = [], 0
             for y in range(len(rows)):
                 x = 0
+                rowEl = []
                 while x < len(rows[y]):
                     d = rows[y][x]
                     if not d:
                         x = x + 1
                         continue
-                    el = MapDataElement.createFromIdsAt(self, x, y, d)
+                    el = MapDataElement.createWithXY(self, x, y, d)
                     if el:
                         c.append(el)
+                        rowEl.append(el)
                     elif x == 0:
                         d = str(d)
                         for xx in range(1, len(rows[y])):
-                            el = MapDataElement.createFromIdsAt(self, x, y, rows[y][xx])
+                            el = MapDataElement.createWithXY(self, x, y, rows[y][xx])
                             if el:
                                 el.text, el.textAlign, el.textPlacement = d, 'r', 'l'
                                 c.append(el)
+                                rowEl.append(el)
                                 rows[y][0:xx] = []
                                 break
                             else:
@@ -303,6 +310,15 @@ class Map(QWidget):
                         el: MapDataElement = c[-1]
                         el.text, el.textAlign, el.textPlacement = str(d), 'l', 'r'
                     x = x + 1
+                if rowEl:
+                    maxRowWidth = max(rowEl[-1].x, maxRowWidth)
+                    rowsEl.append(rowEl)
+            maxRowWidth = maxRowWidth // 2 * 2 + 1 # keep it odd
+            for row in rowsEl:
+                prepend = (maxRowWidth - row[-1].x) // 2
+                if prepend > 0:
+                    for el in row:
+                        el.x = el.x + prepend
 
         if bad or len(c) == 0:
             QMessageBox(QMessageBox.Icon.Warning, TR("Paste"),
@@ -373,6 +389,12 @@ class Map(QWidget):
             if len(self.svgBoxes) * len(self.svgBoxes[0]) > 1600 and len(self.data.data) > 900:
                 self._toggleSvgBoxesMoving(True)
         elif len(self.hover.labels) > 0:
+            if a0.buttons() & QtCore.Qt.MouseButton.RightButton:
+                self.hover.clear()
+                self.pressHoldSel = False
+                self.dragger.reset()
+                return super().mousePressEvent(a0)
+
             old = self.hover.labels
             self.hover.end(a0.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier)
             self.pressHoldSel = False

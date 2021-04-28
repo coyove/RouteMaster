@@ -4,6 +4,14 @@ import os
 import time
 
 from PyQt5.QtCore import QLocale
+from PyQt5.QtWidgets import QDialog, QVBoxLayout
+
+class VDialog(QDialog):
+    def __init__(self, parent) -> None:
+        super().__init__(parent=parent)
+        self.setWindowTitle(APP_NAME)
+        self.setFixedWidth(WIN_WIDTH)
+        self.box = QVBoxLayout(self)
 
 ICON_PACKAGE = '../../block.zip'
 
@@ -15,9 +23,11 @@ APP_NAME = 'RouteMaster'
 
 APP_VERSION = '0.1.0'
 
-LOGS = collections.deque(maxlen=5000)
+LOGS = collections.deque(maxlen=1000)
 
 START_TIME = time.time()
+
+NEW_LINE = bytes([0xA])
 
 AP = argparse.ArgumentParser()
 
