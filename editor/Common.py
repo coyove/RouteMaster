@@ -1,5 +1,6 @@
 import argparse
 import collections
+from genericpath import exists
 import os
 import time
 
@@ -13,15 +14,18 @@ class VDialog(QDialog):
         self.setFixedWidth(WIN_WIDTH)
         self.box = QVBoxLayout(self)
 
+APP_NAME = 'RouteMaster'
+
+APP_VERSION = '0.1.0'
+
 ICON_PACKAGE = '../../block.zip'
+
+BLOCK_DIR = os.path.join(os.path.expanduser("~"), APP_NAME + "_blocks")
+os.makedirs(BLOCK_DIR, exist_ok=True)
 
 WIN_WIDTH = 400
 
 BS = 32
-
-APP_NAME = 'RouteMaster'
-
-APP_VERSION = '0.1.0'
 
 LOGS = collections.deque(maxlen=1000)
 

@@ -93,6 +93,8 @@ class MapDataElement:
             el.textY = x["textY"]
             el.textFont = x["textFont"]
             el.startXOffset = x.get("startXOffset", 0)
+            if not el.src:
+                qDebug(("fromdict invalid source: " + x["svgId"]).encode('utf-8'))
             return el
         except KeyError:
             qDebug(("fromdict invalid key: " + json.dumps(x)).encode('utf-8'))
@@ -280,6 +282,21 @@ class MapCell:
         for s in s.cascades:
             s.paint(x, y, w, h, p, ghost=ghost, xOffsetPercent=lastXOffset)
             lastXOffset = lastXOffset + s._ratio
+
+    def _paintRect(s: MapDataElement, x, y, w, h, p: QPainter):
+        def adv(x, w, drawWidth, xOffsetPercent):
+            xOffsetPercent = xOffsetPercent % 1
+            return x + int(xOffsetPercent * w) + drawWidth
+        lastXOffset = s.startXOffset
+        right = 0
+        right = max(right, adv(x, w, h * s.src._ratio, lastXOffset))
+        lastXOffset = lastXOffset + s.src._ratio
+        for s in s.cascades:
+            right = max(right, adv(x, w, h * s._ratio, lastXOffset))
+            lastXOffset = lastXOffset + s._ratio
+        w = right - x
+        p.drawRect(x, y, w, h)
+        p.fillRect(x, y, w, h, QColor(255, 255, 0, 90))
         
     def paint(self, p: QPainter): 
         blockSize = self.parent._blocksize()

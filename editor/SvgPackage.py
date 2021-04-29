@@ -6,7 +6,7 @@ from PyQt5 import QtCore
 from PyQt5.QtWidgets import (QApplication, QFileDialog, QLabel, QMainWindow,
                              QProgressBar, QVBoxLayout, QWidget)
 
-from Common import APP_NAME
+from Common import APP_NAME, BLOCK_DIR
 
 
 class Loader(QMainWindow):
@@ -69,7 +69,7 @@ class LoaderTask(QtCore.QThread):
             fn = os.path.basename(file.filename)
             if fn.endswith(".svg") or fn.endswith(".png") or fn.endswith(".json"):
                 r = zf.open(file) 
-                with open(os.path.join('block', fn), 'wb+') as w:
+                with open(os.path.join(BLOCK_DIR, fn), 'wb+') as w:
                     while True:
                         buf = r.read(4096)
                         if not buf:
@@ -79,14 +79,13 @@ class LoaderTask(QtCore.QThread):
             # self.bar.setValue(extracted_size)
         zf.close()
         if not self.parent().closed:
-            f = open("block/finished", 'w+')
+            f = open(BLOCK_DIR + "/finished", 'w+')
             f.write(str(int(time.time())))
             f.close()
         self.taskFinished.emit()
 
 def load_package(path=None, force=False):
-    os.makedirs('block', exist_ok=True)
-    if os.path.isfile('block/finished') and not force:
+    if os.path.isfile(BLOCK_DIR + '/finished') and not force:
         return
 
     if not path:

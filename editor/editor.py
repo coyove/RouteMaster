@@ -11,7 +11,7 @@ from PyQt5.QtWidgets import (QAction, QApplication, QDialog, QFileDialog,
                              QPushButton, QSplitter, QStatusBar, QTextEdit,
                              QVBoxLayout, QWidget)
 
-from Common import (AP, APP_NAME, APP_VERSION, ICON_PACKAGE, LANG, LOGS,
+from Common import (AP, APP_NAME, APP_VERSION, BLOCK_DIR, ICON_PACKAGE, LANG, LOGS,
                     NEW_LINE, START_TIME, TR, WIN_WIDTH, VDialog)
 from Map import Map
 from MapData import MapData, MapDataElement, SvgSource
@@ -104,7 +104,7 @@ class Window(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.searcher = SvgSearch('block')
+        self.searcher = SvgSearch(BLOCK_DIR)
         SvgSource.Search = self.searcher
         SvgSource.Parent = self
 
@@ -181,6 +181,10 @@ class Window(QMainWindow):
         self._addMenu(TR('&View'), TR('Center &Selected'), 'Ctrl+Shift+H', lambda x: self.mapview.center(selected=True))
         self._addMenu(TR('&View'), TR('100% &Zoom'), '', lambda x: self.mapview.center(resetzoom=True))
         self._addMenu(TR('&View'), '-')
+        self.showRuler = self._addMenu(TR('&View'), TR('&Ruler'), '', self.actShowRuler)
+        self.showRuler.setCheckable(True)
+        self.showRuler.setChecked(self.mapview.showRuler)
+        self._addMenu(TR('&View'), '-')
         self._addMenu(TR('&View'), TR('&Logs'), '', lambda x: Logger(self).exec_())
 
         self._addMenu(TR('&Help'), TR('&About'), '', lambda x: About(self).exec_()).setMenuRole(QAction.MenuRole.AboutRole)
@@ -218,6 +222,10 @@ class Window(QMainWindow):
         
     def ghostHoldSvgSource(self, s):
         self.mapview.ghostHold([MapDataElement(s)])
+
+    def actShowRuler(self, v):
+        self.mapview.showRuler = v
+        self.mapview.repaint()
         
     def _askSave(self):
         if self.mapview.data.historyCap:

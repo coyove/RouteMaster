@@ -6,8 +6,8 @@ import typing
 
 from PyQt5 import QtGui
 from PyQt5 import QtCore, QtSvg
-from PyQt5.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen, QPixmap
-from PyQt5.QtWidgets import QListView, QMainWindow, QPushButton, QTableWidget, QTableWidgetItem, QToolBar, QWidget 
+from PyQt5.QtGui import QBrush, QColor, QFont, QFontMetrics, QPainter, QPalette, QPen, QPixmap
+from PyQt5.QtWidgets import QComboBox, QListView, QMainWindow, QPushButton, QTableWidget, QTableWidgetItem, QToolBar, QWidget 
 from urllib.parse import quote, unquote
 from Common import BS, PNG_POLYFILLS
 import os
@@ -18,8 +18,15 @@ def _quote(s: str):
  
 class SvgSearch:
     def __init__(self, path: str) -> None:
-        self.path = path.strip("/")
-        with open(self.path + '/meta.json', 'rb') as f:
+        self.path = path.removesuffix("/")
+        fn = self.path + '/meta.json'
+
+        if not os.path.exists(fn):
+            self.data = {}
+            self.files = {}
+            return
+
+        with open(fn, 'rb') as f:
             data = json.load(f)
 
         self.data = data
@@ -82,13 +89,15 @@ class SvgSource:
             return SvgSource.Manager[id]
         fn, p = SvgSource.Search.guess(id)
         if fn:
-            return SvgSource(fn, p, BS, BS)
+            s = SvgSource(fn, p, BS, BS)
+            return s.svgValid and s or None
         return None
     
     def getcreate(id, fn, w, h):
         if id in SvgSource.Manager:
             return SvgSource.Manager[id]
-        return SvgSource(id, fn, w, h)
+        s = SvgSource(id, fn, w, h)
+        return s.svgValid and s or None
     
     _rotateStepper = 0
     def tryRotate(id: str, q=False, c1234=False):
@@ -122,12 +131,16 @@ class SvgSource:
         if id in PNG_POLYFILLS:
             self._renderer = QPixmap(svgData.removesuffix(".svg") + ".png")
             self._ratio = self._renderer.width() / self._renderer.height()
+            self.svgValid = True
         else:
             self._renderer = QtSvg.QSvgWidget(SvgSource.Parent) # SvgRenderer can't render, don't know why
             self._renderer.load(svgData)
             self._renderer.setVisible(False)
+            self.svgValid = self._renderer.renderer().isValid()
             self._ratio = self._renderer.sizeHint().width() / self._renderer.sizeHint().height()
         self._w, self._h = w, h
+        if not self.svgValid:
+            return
         SvgSource.Manager[self.svgId] = self
         
     def overrideSize(self, w, h):
@@ -145,7 +158,7 @@ class SvgSource:
                 return f.read().decode('utf-8')
         except Exception as e:
             QtCore.qDebug("SvgSource.source: {}".format(e))
-    
+
     def paint(self, x: int, y: int, w: int, h: int, p: QPainter, ghost=False, xOffsetPercent=0):
         # print(xOffsetPercent, xOffsetPercent % 1)
         xOffsetPercent = xOffsetPercent % 1
@@ -165,6 +178,8 @@ class SvgBar(QWidget):
     size = 64
     dragPen = QPen(QColor(0, 0, 0, 255))
     dragPen.setWidth(3)
+    dashPen = QPen(QColor(160, 160, 160), 1, style=QtCore.Qt.PenStyle.DashLine)
+    dashBrush = QBrush(QColor(240, 240, 240))
 
     def __init__(self, parent):
         super().__init__(parent)
@@ -201,18 +216,34 @@ class SvgBar(QWidget):
     def paintEvent(self, a0: QtGui.QPaintEvent) -> None:
         p = QPainter(self)
         p.fillRect(0, 0, self.width(), self.height(), QColor(255 ,255, 255))
+        p.drawRect(0, 0, self.width(), self.height())
         for i in range(len(self.sources)):
             x = i * SvgBar.size
             s: SvgSource = self.sources[i]
             m = 8
+            sz = SvgBar.size - m*2
             if s._ratio > 1:
-                s.paint(x + m, m, (SvgBar.size - m*2) / 2, (SvgBar.size - m*2) / 2, p)
-                p.drawRect(x + m, m, SvgBar.size - m*2, (SvgBar.size - m*2) / 2)
+                s.paint(x + m, m, sz / 2, sz / 2, p)
+                r = QtCore.QRect(x + m, m + sz / 2, sz, sz / 2)
+                p.save()
+                p.setPen(SvgBar.dashPen)
+                p.drawRect(r)
+                p.fillRect(r, SvgBar.dashBrush)
+                p.restore()
+                p.drawText(r, QtCore.Qt.AlignmentFlag.AlignCenter, str(s._ratio))
+                p.drawRect(x + m, m, sz, sz / 2)
             else:
-                sz = SvgBar.size - m*2
                 w = sz * s._ratio
-                s.paint(x + (sz - w) / 2 + m, m, sz, sz, p)
-                p.drawRect(x + (sz - w) / 2 + m, m, w, sz)
+                s.paint(x + m, m, sz, sz, p)
+                if s._ratio != 1:
+                    r = QtCore.QRect(x + m + w, m, sz - w, sz)
+                    p.save()
+                    p.setPen(SvgBar.dashPen)
+                    p.drawRect(r)
+                    p.fillRect(r, SvgBar.dashBrush)
+                    p.restore()
+                    p.drawText(r, QtCore.Qt.AlignmentFlag.AlignCenter, chr(0xbb + int((1 - s._ratio) / 0.25)))
+                p.drawRect(x + m, m, w, sz)
             opt = QtGui.QTextOption(QtCore.Qt.AlignmentFlag.AlignCenter)
             opt.setWrapMode(QtGui.QTextOption.WrapMode.WrapAnywhere)
             p.save()

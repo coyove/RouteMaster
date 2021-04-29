@@ -25,6 +25,7 @@ dict = {
     "&Clear History": "清除历史记录(&C)",
     "&Select by Text": "按文案选择块(&S)",
     "&Center": "居中(&C)",
+    "&Ruler": "标尺(&R)",
     "&Logs": "日志(&L)",
     "Clear Logs": "清空日志",
     "Center &Selected": "居中选中(&S)",

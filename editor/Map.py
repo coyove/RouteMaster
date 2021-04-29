@@ -7,11 +7,11 @@ from json.decoder import JSONDecodeError
 
 import PyQt5.QtGui as QtGui
 from PyQt5 import QtCore
-from PyQt5.QtWidgets import (QApplication, QInputDialog, QLineEdit,
+from PyQt5.QtWidgets import (QApplication, QComboBox, QInputDialog, QLineEdit,
                              QMainWindow, QMessageBox, QWidget, qApp)
 
 from Common import BS, TR
-from Controller import DragController, HoverController, Selection
+from Controller import DragController, HoverController, Ruler, Selection
 from MapData import MapCell, MapData, MapDataElement
 from Parser import parseBS
 from Svg import SvgSource
@@ -21,6 +21,8 @@ def mod(x, y):
     return x - int(x/y) * y
 
 class Map(QWidget):
+    Background = QtGui.QColor(255, 255, 255)
+
     import functools
 
     @functools.cache
@@ -56,6 +58,7 @@ class Map(QWidget):
         self.selector = Selection(self)
         self.dragger = DragController(self)
         self.hover = HoverController(self)
+        self.ruler = Ruler(self)
         self.svgBoxes = []
         self.svgBoxesRecycle = []
         self.currentData: MapDataElement = None
@@ -65,6 +68,7 @@ class Map(QWidget):
         self.pressPos = None
         self.pressPosPath = []
         self.pressHoldSel = False
+        self.showRuler = True
         self.setFocusPolicy(QtCore.Qt.FocusPolicy.ClickFocus)
         
     def cacheSvgBoxLocked(self, cell):
@@ -77,7 +81,7 @@ class Map(QWidget):
     def paintEvent(self, a0: QtGui.QPaintEvent) -> None:
         p = QtGui.QPainter(self)
         p.setRenderHint(QtGui.QPainter.RenderHint.HighQualityAntialiasing)
-        p.fillRect(0, 0, self.width(), self.height(), QtGui.QColor(255, 255, 255))
+        p.fillRect(0, 0, self.width(), self.height(), Map.Background)
         for row in self.svgBoxes:
             for cell in row:
                 cell and cell.paint(p)
@@ -88,6 +92,11 @@ class Map(QWidget):
             s, e = self.pressPosPath[i], self.pressPosPath[i < len(self.pressPosPath) - 1 and i + 1 or 0]
             p.drawLine(s[0], s[1], e[0], e[1])
 
+        w = 0
+        if self.showRuler:
+            w = Ruler.Width
+            self.ruler.paint(p)
+
         vis = []
         QApplication.queryKeyboardModifiers() & QtCore.Qt.KeyboardModifier.ControlModifier and vis.append('\u2318' if sys.platform == 'darwin' else 'Ctrl')
         QApplication.queryKeyboardModifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier and vis.append("Shift")
@@ -96,11 +105,11 @@ class Map(QWidget):
         QApplication.mouseButtons() & QtCore.Qt.MouseButton.RightButton and vis.append("^R")
         if vis:
             p.setFont(Map.BigFont())
-            p.drawText(0, Map.BigFont().pointSize(), '-'.join(vis))
+            p.drawText(w, w + Map.BigFont().pointSize(), '-'.join(vis))
 
         p.end()
         return super().paintEvent(a0)
-    
+
     def deltaxy(self): 
         blockSize = int(BS * self.scale)
         sx = mod(self.viewOrigin[0], blockSize)
@@ -149,7 +158,7 @@ class Map(QWidget):
                     self.svgBoxes[y][x] = cell
                     cell.loadResizeMove(tmp, self.scale, x * int(blockSize) + sx - blockSize, y * int(blockSize) + sy - blockSize)
                 
-        self.findMainWin().barPosition.setText('x:{}({}) y:{}({})'.format(-offsetX, -int(offsetX / blockSize), offsetY, int(offsetY / blockSize)))
+        self.findMainWin().barPosition.setText('x:{}({}) y:{}({})'.format(offsetX, int(offsetX / blockSize), offsetY, int(offsetY / blockSize)))
         self.findMainWin().barZoom.setText('{}%'.format(int(self.scale * 100)))
         
         self.selectionEvent()
@@ -437,7 +446,12 @@ class Map(QWidget):
     def mouseMoveEvent(self, a0: QtGui.QMouseEvent) -> None:
         d, cell, pt = self.findCellUnder(a0)
         if d:
+            self.ruler.currentXY = (d.x, d.y)
             self.findMainWin().barCursor.setText("{}-{}".format(d.x, d.y))
+            p = QtGui.QPainter(self)
+            self.ruler.paint(p)
+            p.end()
+            self.update()
         if a0.buttons() & QtCore.Qt.MouseButton.MidButton:
         # if isinstance(self.pressPos, QtCore.QPoint):
             diff: QtCore.QPoint = a0.pos() - self.pressPos

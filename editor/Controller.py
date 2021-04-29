@@ -1,7 +1,9 @@
+from os import curdir
+import sys
 import typing
 
 from PyQt5 import QtCore
-from PyQt5.QtGui import QColor, QPainter, QPen
+from PyQt5.QtGui import QClipboard, QColor, QPainter, QPen
 
 from MapData import MapCell, MapData, MapDataElement
 
@@ -15,9 +17,6 @@ class Selection:
             self.datax, self.datay = data.x, data.y
             self.data = data
             
-        def oddeven(self):
-            return (self.datax + self.datay) % 2
-
     def __init__(self, parent) -> None:
         self.parent = parent
         self.labels: typing.List[Selection.Block] = []
@@ -29,11 +28,11 @@ class Selection:
         x, y = dd.x(), dd.y()
         bs = self.parent._blocksize()
         for l in self.labels:
+            el: MapDataElement = l.data
             posx = l.data.x * bs + self.parent.viewOrigin[0]
             posy = l.data.y * bs + self.parent.viewOrigin[1]
-            p.fillRect(posx, posy, bs, bs, QColor(255, 255, 0, l.oddeven() and 135 or 90))
+            MapCell._paintRect(el, posx, posy, bs, bs, p)
             if x or y: # paint select-n-drag blocks if presented
-                el: MapDataElement = l.data
                 MapCell._paint(el, posx + x, posy + y, bs, bs, p, ghost=True)
         
     def addSelection(self, data: MapDataElement, propertyPanel = True):
@@ -180,3 +179,58 @@ class DragController:
         p.drawEllipse(startx - DragController.Size / 2, starty - DragController.Size / 2, DragController.Size, DragController.Size)
         p.drawEllipse(dragtox - DragController.Size / 2, dragtoy - DragController.Size / 2, DragController.Size, DragController.Size)
         p.restore()
+
+class Ruler:
+    Width = 20
+    Background = QColor(255, 255, 255)
+    Cursor = QColor(200, 200, 200)
+
+    def __init__(self, parent) -> None:
+        self.parent = parent
+        self.currentXY = (sys.maxsize, sys.maxsize)
+
+    def paint(self, p: QPainter):
+        # hack
+        old = self
+        self = self.parent
+
+        blockSize = self._blocksize()
+        width = Ruler.Width
+        xx = int(self.viewOrigin[0] / blockSize) * blockSize
+        yy = int(self.viewOrigin[1] / blockSize) * blockSize
+        sx, sy = self.deltaxy()
+        smallstep = blockSize if blockSize > width * 5 else width * 5 // blockSize * blockSize + blockSize
+        opt = QtCore.Qt.AlignmentFlag.AlignVCenter | QtCore.Qt.AlignmentFlag.AlignLeft
+
+        p.fillRect(0, 0, width, self.height(), Ruler.Background)
+        for y in range(0, self.height() + blockSize, blockSize):
+            iy = int((y - yy) / blockSize)
+            if iy == old.currentXY[1]:
+                p.fillRect(0, y + sy, width, blockSize, Ruler.Cursor)
+
+            if (y - yy) % smallstep != 0:
+                p.drawLine(0, y + sy, width / 4, y + sy)
+                continue
+            y = y + sy
+            p.drawLine(0, y, width, y)
+            p.translate(0, y)
+            p.rotate(-90)
+            p.drawText(QtCore.QRect(1, 0, smallstep, width), opt, str(iy))
+            p.resetTransform()
+        p.drawLine(width, 0, width, self.height())
+
+        p.fillRect(0, 0, self.width(), width, Ruler.Background)
+        for x in range(0, self.width() + blockSize, blockSize):
+            ix = int((x - xx) / blockSize)
+            if ix == old.currentXY[0]:
+                p.fillRect(x + sx, 0, blockSize, width, Ruler.Cursor)
+
+            if (x - xx) % smallstep != 0:
+                p.drawLine(x + sx, 0, x + sx, width / 4)
+                continue
+            x = x + sx
+            p.drawLine(x, 0, x, width)
+            p.drawText(QtCore.QRect(x + 1, 0, smallstep, width), opt, str(ix))
+        p.drawLine(0, width, self.width(), width)
+
+        p.drawRect(0, 0, self.width(), self.height())
