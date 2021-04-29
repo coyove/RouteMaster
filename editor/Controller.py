@@ -2,6 +2,8 @@ from os import curdir
 import sys
 import typing
 
+from PyQt5 import QtGui
+
 from PyQt5 import QtCore
 from PyQt5.QtGui import QClipboard, QColor, QPainter, QPen
 
@@ -47,6 +49,14 @@ class Selection:
         if propertyPanel:
             self.parent.findMainWin().propertyPanel.update()
         return True
+
+    def addRowCol(self, data: MapData, add, x=sys.maxsize, y=sys.maxsize):
+        if not add:
+            self.clear()
+        for dx, dy in data.data:
+            if dy == y or dx == x:
+                self.addSelection(data.data[(dx, dy)], False)
+        self.parent.findMainWin().propertyPanel.update()
         
     def delSelection(self, data: MapDataElement):
         if not id(data) in self.dedup:
@@ -200,7 +210,11 @@ class Ruler:
         yy = int(self.viewOrigin[1] / blockSize) * blockSize
         sx, sy = self.deltaxy()
         smallstep = blockSize if blockSize > width * 5 else width * 5 // blockSize * blockSize + blockSize
-        opt = QtCore.Qt.AlignmentFlag.AlignVCenter | QtCore.Qt.AlignmentFlag.AlignLeft
+        optX = QtCore.Qt.AlignmentFlag.AlignVCenter | QtCore.Qt.AlignmentFlag.AlignLeft
+        optY = QtCore.Qt.AlignmentFlag.AlignVCenter | QtCore.Qt.AlignmentFlag.AlignRight
+
+        p.save()
+        p.setFont(QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.SystemFont.FixedFont))
 
         p.fillRect(0, 0, width, self.height(), Ruler.Background)
         for y in range(0, self.height() + blockSize, blockSize):
@@ -213,9 +227,9 @@ class Ruler:
                 continue
             y = y + sy
             p.drawLine(0, y, width, y)
-            p.translate(0, y)
+            p.translate(0, y + smallstep)
             p.rotate(-90)
-            p.drawText(QtCore.QRect(1, 0, smallstep, width), opt, str(iy))
+            p.drawText(QtCore.QRect(0, 0, smallstep - 1, width), optY, str(iy))
             p.resetTransform()
         p.drawLine(width, 0, width, self.height())
 
@@ -230,7 +244,9 @@ class Ruler:
                 continue
             x = x + sx
             p.drawLine(x, 0, x, width)
-            p.drawText(QtCore.QRect(x + 1, 0, smallstep, width), opt, str(ix))
+            p.drawText(QtCore.QRect(x + 1, 0, smallstep, width), optX, str(ix))
         p.drawLine(0, width, self.width(), width)
 
         p.drawRect(0, 0, self.width(), self.height())
+
+        p.restore()

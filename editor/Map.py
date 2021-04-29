@@ -391,13 +391,19 @@ class Map(QWidget):
 
     def mousePressEvent(self, a0: QtGui.QMouseEvent) -> None:
         d, _, pt = self.findCellUnder(a0)
+        if d and self.showRuler and a0.x() < Ruler.Width: # quick row selection
+            self.selector.addRowCol(self.data, a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier, y=d.y)
+            return super().mousePressEvent(a0)
+        if d and self.showRuler and a0.y() < Ruler.Width: # quick column selection
+            self.selector.addRowCol(self.data, a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier, x=d.x)
+            return super().mousePressEvent(a0)
         self.currentData = d
-        if a0.buttons() & QtCore.Qt.MouseButton.MidButton:
+        if a0.buttons() & QtCore.Qt.MouseButton.MidButton: # pan start
             self.pressPos = a0.pos()
             QApplication.setOverrideCursor(QtCore.Qt.CursorShape.DragMoveCursor)
             if len(self.svgBoxes) * len(self.svgBoxes[0]) > 1600 and len(self.data.data) > 900:
                 self._toggleSvgBoxesMoving(True)
-        elif len(self.hover.labels) > 0:
+        elif len(self.hover.labels) > 0: # ghost hold, place them
             if a0.buttons() & QtCore.Qt.MouseButton.RightButton:
                 self.hover.clear()
                 self.pressHoldSel = False
@@ -417,17 +423,17 @@ class Map(QWidget):
             self.pressPos = None
             self.pressHoldSel = True
             if d:
-                if a0.buttons() & QtCore.Qt.MouseButton.RightButton:
+                if a0.buttons() & QtCore.Qt.MouseButton.RightButton: # dragging
                     self.selector.addSelection(d)
                     self.dragger.start(a0.x(), a0.y(), pt)
                 else:
-                    if a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier:
+                    if a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier: # select
                         if not self.selector.addSelection(d):
                             self.pressPos = a0.pos()
                             self.pressPosPath.append((a0.x(), a0.y()))
-                    elif a0.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier:
+                    elif a0.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier: # un-select
                         self.selector.delSelection(d)
-                    else:
+                    else: # clear-n-select
                         self.selector.clear()
                         self.selector.addSelection(d)
             self.repaint()
@@ -445,30 +451,27 @@ class Map(QWidget):
 
     def mouseMoveEvent(self, a0: QtGui.QMouseEvent) -> None:
         d, cell, pt = self.findCellUnder(a0)
-        if d:
-            self.ruler.currentXY = (d.x, d.y)
-            self.findMainWin().barCursor.setText("{}-{}".format(d.x, d.y))
-            p = QtGui.QPainter(self)
-            self.ruler.paint(p)
-            p.end()
-            self.update()
-        if a0.buttons() & QtCore.Qt.MouseButton.MidButton:
-        # if isinstance(self.pressPos, QtCore.QPoint):
+        if d: # update ruler
+            xy = (d.x, d.y)
+            changed = self.ruler.currentXY != xy
+            self.ruler.currentXY = xy
+            changed and self.showRuler and self.repaint()
+        if a0.buttons() & QtCore.Qt.MouseButton.MidButton: # pan
             diff: QtCore.QPoint = a0.pos() - self.pressPos
             self.pressPos = a0.pos()
             self.pan(diff.x(), diff.y())
-        elif a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier and self.pressPosPath:
+        elif a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier and self.pressPosPath: # circle select
             self._appendPressPath()
             self.pressPos = a0.pos()
             self.repaint()
         elif self.pressHoldSel:
             if d:
-                if self.dragger.started:
+                if self.dragger.started: # drag, show drag pointer
                     self.dragger.drag(a0.x(), a0.y(), pt)
                 else:
-                    if a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier:
+                    if a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier: # select
                         self.selector.addSelection(d)
-                    elif a0.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier:
+                    elif a0.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier: # un-select
                         self.selector.delSelection(d)
             self.repaint()
         return super().mouseMoveEvent(a0)
@@ -476,7 +479,7 @@ class Map(QWidget):
     def mouseReleaseEvent(self, a0: QtGui.QMouseEvent) -> None:
         self.pressPos = None
         
-        if self.pressPosPath:
+        if self.pressPosPath: # circle select, calc how many blocks have been circled
             poly = QtGui.QPolygon()
             for x, y in self.pressPosPath:
                 poly.append(QtCore.QPoint(x, y))
@@ -485,13 +488,12 @@ class Map(QWidget):
                     if cell and cell.current:
                         p = QtCore.QPoint(cell.posx + self._blocksize() // 2, cell.posy + self._blocksize() // 2)
                         if poly.containsPoint(p, QtCore.Qt.FillRule.OddEvenFill):
-                            # print(cell.current.src.svgId)
                             self.selector.addSelection(cell.current, propertyPanel=False)
             self.findMainWin().propertyPanel.update()
             self.pressPosPath.clear()
         
         if self.hover.labels:
-            pass # hover depends on dragger, so we don't end it
+            pass # ghost hold depends on dragger, don't end() it here, call end() in mousePressEvent
         else:
             self.pressHoldSel = False
             dx, dy = self.dragger.end()
