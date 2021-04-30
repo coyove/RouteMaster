@@ -351,6 +351,8 @@ class Map(QWidget):
             c.moving = v
 
     def mousePressEvent(self, a0: QtGui.QMouseEvent) -> None:
+        if FLAGS["DEBUG_crash"]:
+            print(1 // 0)
         if self.showRuler and self.ruler.mousePress(a0):
             self.repaint()
             return super().mousePressEvent(a0)
@@ -388,21 +390,28 @@ class Map(QWidget):
                 elif a0.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier: # un-select
                     self.selector.delSelection(d)
                 elif d.src: # select-n-drag
-                    selfClick = False
                     if len(self.selector.labels) == 1:
-                        e = self.selector.labels[0]
                         self.selector.clear()
-                        selfClick = e.data == d
-                    if not selfClick:
-                        self.selector.addSelection(d)
-                        self.dragger.start(a0.x(), a0.y(), pt)
+                    self.selector.addSelection(d)
+                    self.dragger.start(a0.x(), a0.y(), pt)
                 else: # clear selections
                     self.selector.clear()
+                    # let's take the slow way, find something visually selectable and select it for user
                     bs = self._blocksize()
                     d, _, _ = self.findCellUnder(None, QtCore.QPoint(a0.x() - bs, a0.y()))
                     if d and d.src and d.calcActualWidthX(bs, bs) > bs:
-                        # e.g.: double width block consists of 2 std blocks (a, b), user clicks "b", we find "a"
+                        # double width block consists of 2 std blocks (a, b), user clicked "b", we select "a"
                         self.selector.addSelection(d)
+                    else:
+                        # block with text, user clicked "text", we select the block
+                        for row in self.svgBoxes:
+                            for cell in row:
+                                if cell and cell.current.text:
+                                    cell: MapCell
+                                    r = cell.current.textbbox(self.scale, cell.posx, cell.posy, measure=True)
+                                    if r.contains(a0.pos()):
+                                        self.selector.addSelection(cell.current)
+                                        self.currentData = cell.current
             self.repaint()
         return super().mousePressEvent(a0)
     

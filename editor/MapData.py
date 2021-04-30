@@ -208,7 +208,7 @@ class MapData:
                 r = self.data[k].textbbox(scale=1, measure=True)
                 merge(math.ceil(r.x() / BS) - 1 + x, math.ceil(r.y() / BS) - 1 + y)
                 merge(math.ceil((r.x() + r.width()) / BS) + 1 + x, math.ceil((r.y() + r.height()) / BS) + 1 + y)
-        return QRect(minx, miny, maxx - minx, maxy - miny)
+        return QRect(minx, miny, maxx - minx + 1, maxy - miny + 1)
        
     def delete(self, x: int, y: int):
         self._appendHistory(self._delete(x, y), None, x, y)

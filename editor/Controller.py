@@ -2,12 +2,12 @@ import sys
 import typing
 
 from PyQt5 import QtCore, QtGui
-from PyQt5.QtGui import QBrush, QClipboard, QColor, QMouseEvent, QPainter, QPen
-
-from MapData import MapCell, MapData, MapDataElement
+from PyQt5.QtGui import (QBrush, QClipboard, QColor, QMouseEvent, QPainter,
+                         QPainterPath, QPen)
 from PyQt5.QtWidgets import QMenu
 
 from Common import TR
+from MapData import MapCell, MapData, MapDataElement
 
 
 class Selection:
@@ -197,9 +197,10 @@ class DragController:
 class Ruler:
     Width = 20
     Background = QColor(255, 255, 255)
-    Cursor = QColor(200, 200, 200)
+    Cursor = QColor(222, 237, 254)
     Corner = QBrush(QColor(0, 0, 0), QtCore.Qt.BrushStyle.BDiagPattern)
     HVPen = QPen(QColor(190, 190, 190), 1, QtCore.Qt.PenStyle.DashLine)
+    BorderPen = QPen(QColor(120, 120, 120))
 
     def __init__(self, parent) -> None:
         self.parent = parent
@@ -243,10 +244,13 @@ class Ruler:
     def _drawLine(self, x, y, h, p: QPainter):
         p.save()
         p.setPen(Ruler.HVPen)
+        bs = self.parent._blocksize()
         if h:
-            p.drawLine(x, y, x + self.parent.width(), y)
+            p.drawLine(x, y + bs // 2, x + self.parent.width(), y + bs // 2)
+            p.fillRect(0, y, Ruler.Width // 4, bs, QColor(0xed, 0x7c, 0x93))
         else:
-            p.drawLine(x, y, x, y + self.parent.height())
+            p.drawLine(x + bs // 2, y, x + bs // 2, y + self.parent.height())
+            p.fillRect(x, 0, bs, Ruler.Width // 4, QColor(0xed, 0x7c, 0x93))
         p.restore()
 
     def paint(self, p: QPainter):
@@ -264,15 +268,14 @@ class Ruler:
         optY = QtCore.Qt.AlignmentFlag.AlignVCenter | QtCore.Qt.AlignmentFlag.AlignRight
 
         p.save()
+        p.setPen(Ruler.BorderPen)
         p.setFont(QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.SystemFont.FixedFont))
 
         p.fillRect(0, 0, width, self.height(), Ruler.Background)
         for y in range(0, self.height() + blockSize, blockSize):
             iy = int((y - yy) / blockSize)
-            if iy == old.currentXY[1]:
-                p.fillRect(0, y + sy, width, blockSize, Ruler.Cursor)
-            if iy in old.hlines:
-                old._drawLine(0, y + sy + blockSize / 2, True, p)
+            iy == old.currentXY[1] and p.fillRect(0, y + sy, width, blockSize, Ruler.Cursor)
+            iy in old.hlines and old._drawLine(width, y + sy, True, p)
 
             if (y - yy) % smallstep != 0:
                 p.drawLine(0, y + sy, width / 4, y + sy)
@@ -291,10 +294,8 @@ class Ruler:
             if x + sx < width:
                 continue
             ix = int((x - xx) / blockSize)
-            if ix == old.currentXY[0]:
-                p.fillRect(x + sx, 0, blockSize, width, Ruler.Cursor)
-            if ix in old.vlines:
-                old._drawLine(x + sx + blockSize / 2, 0, False, p)
+            ix == old.currentXY[0] and p.fillRect(x + sx, 0, blockSize, width, Ruler.Cursor)
+            ix in old.vlines and old._drawLine(x + sx, width, False, p)
 
             if (x - xx) % smallstep != 0:
                 p.drawLine(x + sx, 0, x + sx, width / 4)
@@ -316,6 +317,8 @@ class Ruler:
         return [list(self.hlines), list(self.vlines)]
 
     def fromdict(self, d):
+        self.hlines = set()
+        self.vlines = set()
         if not isinstance(d, list) or len(d) != 2:
             return
         self.hlines = set(d[0])

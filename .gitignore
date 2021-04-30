@@ -13,3 +13,5 @@ icon*
 *.app
 *.png
 logs.txt
+*.xcf
+*.old

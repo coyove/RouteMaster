@@ -1,4 +1,5 @@
 import json
+import shutil
 from json.decoder import JSONDecodeError
 import os
 import sys
@@ -28,10 +29,12 @@ AP.add_argument('--png-scale', help="output PNG scale", type=int, default=1)
 AP.add_argument('--show-keys', help="show modifier keys", action="store_true")
 AP.add_argument('--hide-ruler', help="hide UI ruler", action="store_true")
 AP.add_argument('--simple-pan-limit', help="performance tuning", type=int, default=2500)
+AP.add_argument('--debug-crash', help="DEBUG ONLY", action="store_true")
 args = AP.parse_args()
 FLAGS['show_keys'] = args.show_keys
 FLAGS['hide_ruler'] = args.hide_ruler
 FLAGS['perf1'] = args.simple_pan_limit
+FLAGS['DEBUG_crash'] = args.debug_crash
 logfile = open('logs.txt', 'ab+')
 
 class Logger(QDialog):
@@ -305,7 +308,12 @@ class Window(QMainWindow):
         if os.path.exists(crashfn):
             ans = QMessageBox.question(self, TR('Open'), TR('__open_crash__').format(crashfn))
             if ans == QMessageBox.StandardButton.Yes:
-                fn, delcrash = crashfn, True
+                if fn == "":
+                    fn = crashfn
+                else:
+                    shutil.copy2(fn, fn + ".old")
+                    shutil.copy2(crashfn, fn)
+                delcrash = True
             else:
                 os.remove(crashfn)
         if not os.path.exists(fn):
@@ -389,10 +397,10 @@ QtCore.qInstallMessageHandler(messagehandle)
 QtCore.qDebug(time.strftime("[START] %m-%d-%Y %H:%M:%S"))
 
 app = QApplication([])
+app.setWindowIcon(QtGui.QIcon("logo.ico"))
 trdir = QtCore.QLibraryInfo.location(QtCore.QLibraryInfo.LibraryLocation.TranslationsPath)
 tr = QtCore.QTranslator()
 if not os.path.exists(os.path.join(trdir, "qtbase_zh_CN")):
-    import shutil
     shutil.copy2('i18n/qtbase_zh_CN.qm', os.path.join(trdir, "qtbase_zh_CN"))
 tr.load("qtbase_" + LANG, trdir)
 app.installTranslator(tr)

@@ -1,9 +1,10 @@
+import json
 import re
 import typing
 
 from PyQt5 import QtCore
 from PyQt5.QtGui import QFontDatabase
-from PyQt5.QtWidgets import (QComboBox, QDialog, QHBoxLayout, QLabel,
+from PyQt5.QtWidgets import (QApplication, QComboBox, QDialog, QHBoxLayout, QLabel,
                              QLineEdit, QListWidget, QMainWindow, QPushButton,
                              QScrollArea, QSizePolicy, QSpinBox, QTableWidget,
                              QTableWidgetItem, QTabWidget, QTextEdit,
@@ -35,6 +36,7 @@ class Property(QWidget):
         self.cascades.setVisible(False)
         self.cascades.onDelete = self.deleteCascade
         self.cascades.onDrag = self.resortCascade
+        self.cascades.onCopy = self.onCopy
         self.textAttrBox.addWidget(self.cascades)
         
         self.svgId = QLabel('N/A', self)
@@ -143,6 +145,13 @@ class Property(QWidget):
 
     def _getMapData(self) -> MapData:
         return self.findMainWin().mapview.data
+
+    def onCopy(self, src):
+        if not src:
+            return 
+        v = json.dumps([MapDataElement(src).todict()])
+        QApplication.clipboard().setText(v)
+        self.findMainWin().mapview.setFocus()
         
     def deleteCascade(self, idx: int):
         self._getMapData().begin()
@@ -160,7 +169,7 @@ class Property(QWidget):
     def resortCascade(self, fr: int, to: int):
         self._getMapData().begin()
         item: MapDataElement = self.selection()[0]
-        old = item.pack()
+        last = item.pack()
         if to == 0:
             fr = fr - 1
             old = item.src
@@ -175,7 +184,7 @@ class Property(QWidget):
             fold = item.cascades[fr]
             item.cascades = item.cascades[:fr] + item.cascades[fr + 1:]
             item.cascades = item.cascades[:to] + [fold] + item.cascades[to:]
-        self._getMapData()._appendHistoryPacked(old, item.pack())
+        self._getMapData()._appendHistoryPacked(last, item.pack())
         self.findMainWin().mapview.setFocus()
         self.update()
         

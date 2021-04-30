@@ -190,6 +190,7 @@ class SvgBar(QWidget):
         self.setFocusPolicy(QtCore.Qt.FocusPolicy.ClickFocus)
         self.onDelete = None
         self.onDrag = None
+        self.onCopy = None
         self.update([])
     
     def cells(self):
@@ -265,11 +266,8 @@ class SvgBar(QWidget):
             idx = self.currentHover + self.page
             if a0.key() == QtCore.Qt.Key.Key_Delete and self.onDelete:
                 self.onDelete(idx)
-            # if a0.key() == QtCore.Qt.Key.Key_Left and idx > 0:
-            #     self.files[idx], self.files[idx - 1] = self.files[idx - 1], self.files[idx]
-            # if a0.key() == QtCore.Qt.Key.Key_Right and idx < len(self.files):
-            #     self.files[idx], self.files[idx + 1] = self.files[idx + 1], self.files[idx]
-        # self.refresh()
+            if a0.key() == QtCore.Qt.Key.Key_C and a0.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier and self.onCopy:
+                self.onCopy(self.sources[self.currentHover])
         return super().keyPressEvent(a0)
     
     def mousePressEvent(self, a0: QtGui.QMouseEvent) -> None:

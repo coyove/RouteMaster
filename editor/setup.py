@@ -9,7 +9,7 @@ from os import name
 from setuptools import setup
 
 APP = ['editor.py']
-DATA_FILES = []
+DATA_FILES = ['logo.ico']
 OPTIONS = {
     'packages': ['i18n'],
 }
