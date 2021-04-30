@@ -10,10 +10,10 @@ from PyQt5 import QtCore
 from PyQt5.QtWidgets import (QApplication, QComboBox, QInputDialog, QLineEdit,
                              QMainWindow, QMessageBox, QWidget, qApp)
 
-from Common import BS, TR
+from Common import BS, FLAGS, TR
 from Controller import DragController, HoverController, Ruler, Selection
 from MapData import MapCell, MapData, MapDataElement
-from Parser import parseBS
+from Parser import filterBS, parseBS
 from Svg import SvgSource
 
 
@@ -97,15 +97,13 @@ class Map(QWidget):
             w = Ruler.Width
             self.ruler.paint(p)
 
-        vis = []
-        QApplication.queryKeyboardModifiers() & QtCore.Qt.KeyboardModifier.ControlModifier and vis.append('\u2318' if sys.platform == 'darwin' else 'Ctrl')
-        QApplication.queryKeyboardModifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier and vis.append("Shift")
-        QApplication.mouseButtons() & QtCore.Qt.MouseButton.LeftButton and vis.append("^L")
-        QApplication.mouseButtons() & QtCore.Qt.MouseButton.MidButton and vis.append("^M")
-        QApplication.mouseButtons() & QtCore.Qt.MouseButton.RightButton and vis.append("^R")
-        if vis:
-            p.setFont(Map.BigFont())
-            p.drawText(w, w + Map.BigFont().pointSize(), '-'.join(vis))
+        if FLAGS.get('show_keys', False):
+            vis = []
+            QApplication.queryKeyboardModifiers() & QtCore.Qt.KeyboardModifier.ControlModifier and vis.append('\u2318' if sys.platform == 'darwin' else 'Ctrl')
+            QApplication.queryKeyboardModifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier and vis.append("Shift")
+            if vis:
+                p.setFont(Map.BigFont())
+                p.drawText(w + 2, w + Map.BigFont().pointSize(), '-'.join(vis))
 
         p.end()
         return super().paintEvent(a0)
@@ -290,44 +288,7 @@ class Map(QWidget):
                     bad = True
         except JSONDecodeError:
             rows = parseBS(text)
-            rowsEl, maxRowWidth = [], 0
-            for y in range(len(rows)):
-                x = 0
-                rowEl = []
-                while x < len(rows[y]):
-                    d = rows[y][x]
-                    if not d:
-                        x = x + 1
-                        continue
-                    el = MapDataElement.createWithXY(self, x, y, d)
-                    if el:
-                        c.append(el)
-                        rowEl.append(el)
-                    elif x == 0:
-                        d = str(d)
-                        for xx in range(1, len(rows[y])):
-                            el = MapDataElement.createWithXY(self, x, y, rows[y][xx])
-                            if el:
-                                el.text, el.textAlign, el.textPlacement = d, 'r', 'l'
-                                c.append(el)
-                                rowEl.append(el)
-                                rows[y][0:xx] = []
-                                break
-                            else:
-                                d = d + str(rows[y][xx])
-                    elif c:
-                        el: MapDataElement = c[-1]
-                        el.text, el.textAlign, el.textPlacement = str(d), 'l', 'r'
-                    x = x + 1
-                if rowEl:
-                    maxRowWidth = max(rowEl[-1].x, maxRowWidth)
-                    rowsEl.append(rowEl)
-            maxRowWidth = maxRowWidth // 2 * 2 + 1 # keep it odd
-            for row in rowsEl:
-                prepend = (maxRowWidth - row[-1].x) // 2
-                if prepend > 0:
-                    for el in row:
-                        el.x = el.x + prepend
+            c = filterBS(rows)
 
         if bad or len(c) == 0:
             QMessageBox(QMessageBox.Icon.Warning, TR("Paste"),
@@ -390,18 +351,15 @@ class Map(QWidget):
             c.moving = v
 
     def mousePressEvent(self, a0: QtGui.QMouseEvent) -> None:
+        if self.showRuler and self.ruler.mousePress(a0):
+            self.repaint()
+            return super().mousePressEvent(a0)
         d, _, pt = self.findCellUnder(a0)
-        if d and self.showRuler and a0.x() < Ruler.Width: # quick row selection
-            self.selector.addRowCol(self.data, a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier, y=d.y)
-            return super().mousePressEvent(a0)
-        if d and self.showRuler and a0.y() < Ruler.Width: # quick column selection
-            self.selector.addRowCol(self.data, a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier, x=d.x)
-            return super().mousePressEvent(a0)
         self.currentData = d
         if a0.buttons() & QtCore.Qt.MouseButton.MidButton: # pan start
             self.pressPos = a0.pos()
             QApplication.setOverrideCursor(QtCore.Qt.CursorShape.DragMoveCursor)
-            if len(self.svgBoxes) * len(self.svgBoxes[0]) > 1600 and len(self.data.data) > 900:
+            if len(self.svgBoxes) * len(self.svgBoxes[0]) > FLAGS['perf1']:
                 self._toggleSvgBoxesMoving(True)
         elif len(self.hover.labels) > 0: # ghost hold, place them
             if a0.buttons() & QtCore.Qt.MouseButton.RightButton:
@@ -423,18 +381,27 @@ class Map(QWidget):
             self.pressPos = None
             self.pressHoldSel = True
             if d:
-                if a0.buttons() & QtCore.Qt.MouseButton.RightButton: # dragging
-                    self.selector.addSelection(d)
-                    self.dragger.start(a0.x(), a0.y(), pt)
-                else:
-                    if a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier: # select
-                        if not self.selector.addSelection(d):
-                            self.pressPos = a0.pos()
-                            self.pressPosPath.append((a0.x(), a0.y()))
-                    elif a0.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier: # un-select
-                        self.selector.delSelection(d)
-                    else: # clear-n-select
+                if a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier: # select
+                    if not self.selector.addSelection(d): # begin circle select
+                        self.pressPos = a0.pos()
+                        self.pressPosPath.append((a0.x(), a0.y()))
+                elif a0.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier: # un-select
+                    self.selector.delSelection(d)
+                elif d.src: # select-n-drag
+                    selfClick = False
+                    if len(self.selector.labels) == 1:
+                        e = self.selector.labels[0]
                         self.selector.clear()
+                        selfClick = e.data == d
+                    if not selfClick:
+                        self.selector.addSelection(d)
+                        self.dragger.start(a0.x(), a0.y(), pt)
+                else: # clear selections
+                    self.selector.clear()
+                    bs = self._blocksize()
+                    d, _, _ = self.findCellUnder(None, QtCore.QPoint(a0.x() - bs, a0.y()))
+                    if d and d.src and d.calcActualWidthX(bs, bs) > bs:
+                        # e.g.: double width block consists of 2 std blocks (a, b), user clicks "b", we find "a"
                         self.selector.addSelection(d)
             self.repaint()
         return super().mousePressEvent(a0)
@@ -444,9 +411,8 @@ class Map(QWidget):
     
     def _appendPressPath(self):
         x, y = self.pressPos.x(), self.pressPos.y()
-        if self.pressPosPath:
-            if abs(x - self.pressPosPath[-1][0]) < 4 and abs(y - self.pressPosPath[-1][1]) < 4:
-                return
+        if abs(x - self.pressPosPath[-1][0]) < 4 and abs(y - self.pressPosPath[-1][1]) < 4:
+            return
         self.pressPosPath.append((x, y))
 
     def mouseMoveEvent(self, a0: QtGui.QMouseEvent) -> None:
@@ -498,7 +464,7 @@ class Map(QWidget):
             self.pressHoldSel = False
             dx, dy = self.dragger.end()
             if dx != 0 or dy != 0:
-                self.selector.move(dx, dy)
+                self.selector.moveEnd(dx, dy)
 
         QApplication.restoreOverrideCursor()
         self._toggleSvgBoxesMoving(False)

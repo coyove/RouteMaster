@@ -1,4 +1,5 @@
 import json
+from json.decoder import JSONDecodeError
 import os
 import sys
 import time
@@ -11,8 +12,8 @@ from PyQt5.QtWidgets import (QAction, QApplication, QDialog, QFileDialog,
                              QPushButton, QSplitter, QStatusBar, QTextEdit,
                              QVBoxLayout, QWidget)
 
-from Common import (AP, APP_NAME, APP_VERSION, BLOCK_DIR, ICON_PACKAGE, LANG, LOGS,
-                    NEW_LINE, START_TIME, TR, WIN_WIDTH, VDialog)
+from Common import (AP, APP_NAME, APP_VERSION, BLOCK_DIR, FLAGS, ICON_PACKAGE,
+                    LANG, LOGS, NEW_LINE, START_TIME, TR, WIN_WIDTH, VDialog)
 from Map import Map
 from MapData import MapData, MapDataElement, SvgSource
 from MapExport import exportMapDataPng, exportMapDataSvg
@@ -24,8 +25,13 @@ globalSvgSources: typing.List[SvgSource] = None
 AP.add_argument('file', nargs="?")
 AP.add_argument('-c', '--convert', help="output PNG/SVG")
 AP.add_argument('--png-scale', help="output PNG scale", type=int, default=1)
-# AP.add_argument('--show-keys', help="show modifier keys", action="store_true")
+AP.add_argument('--show-keys', help="show modifier keys", action="store_true")
+AP.add_argument('--hide-ruler', help="hide UI ruler", action="store_true")
+AP.add_argument('--simple-pan-limit', help="performance tuning", type=int, default=2500)
 args = AP.parse_args()
+FLAGS['show_keys'] = args.show_keys
+FLAGS['hide_ruler'] = args.hide_ruler
+FLAGS['perf1'] = args.simple_pan_limit
 logfile = open('logs.txt', 'ab+')
 
 class Logger(QDialog):
@@ -183,6 +189,7 @@ class Window(QMainWindow):
         self._addMenu(TR('&View'), '-')
         self.showRuler = self._addMenu(TR('&View'), TR('&Ruler'), '', self.actShowRuler)
         self.showRuler.setCheckable(True)
+        self.mapview.showRuler = not FLAGS["hide_ruler"]
         self.showRuler.setChecked(self.mapview.showRuler)
         self._addMenu(TR('&View'), '-')
         self._addMenu(TR('&View'), TR('&Logs'), '', lambda x: Logger(self).exec_())
@@ -288,7 +295,8 @@ class Window(QMainWindow):
                 exportMapDataSvg(self, fn, self.mapview.data)
             QMessageBox.information(self, TR('Export'), TR('__export_success__').format(fn))
         except Exception as e:
-            QMessageBox(QMessageBox.Icon.Warning, TR('Export'), TR('__export_fail__').format(fn, e)).exec_()
+            QMessageBox(QMessageBox.Icon.Warning, TR('Export'), TR('__export_fail__').format(fn)).exec_()
+            QtCore.qDebug("{}".format(e).encode("utf-8"))
             
     def load(self, fn: str):
         d: MapData = self.mapview.data
@@ -303,7 +311,12 @@ class Window(QMainWindow):
         if not os.path.exists(fn):
             return
         with open(fn, 'rb') as f:
-            fd = json.load(f)
+            try:
+                fd = json.load(f)
+            except JSONDecodeError as e:
+                QMessageBox(QMessageBox.Icon.Critical, TR('Open'), TR('__open_fail__').format(fn)).exec_()
+                QtCore.qDebug("{}".format(e).encode("utf-8"))
+                return
             d.clearHistory()
             d.data = {}
             for c in fd['data']:
@@ -315,6 +328,7 @@ class Window(QMainWindow):
             self._updateCurrentFile(fn)
             self.fileMeta["author"] = fd.get("author")
             self.fileMeta["desc"] = fd.get("desc")
+            self.mapview.ruler.fromdict(fd.get("rulers"))
         if delcrash:
             os.remove(crashfn)
     
@@ -334,6 +348,7 @@ class Window(QMainWindow):
                 "desc": self.fileMeta.get("desc"),
                 "ts": int(time.time()),
                 "ver": 1,
+                "rulers": self.mapview.ruler.todict(),
                 "data": z,
             }, f)
             d.clearHistory()
@@ -362,7 +377,7 @@ class Window(QMainWindow):
         return fileOpen
         
 
-QApplication.setStyle('fusion')
+# QApplication.setStyle('fusion')
 
 def messagehandle(t: QtCore.QtMsgType, b, c):
     msg: str = str(int(t)) + "; " + ("%.3f" % (time.time() - START_TIME)) + " " + c

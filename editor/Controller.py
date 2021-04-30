@@ -1,13 +1,13 @@
-from os import curdir
 import sys
 import typing
 
-from PyQt5 import QtGui
-
-from PyQt5 import QtCore
-from PyQt5.QtGui import QClipboard, QColor, QPainter, QPen
+from PyQt5 import QtCore, QtGui
+from PyQt5.QtGui import QBrush, QClipboard, QColor, QMouseEvent, QPainter, QPen
 
 from MapData import MapCell, MapData, MapDataElement
+from PyQt5.QtWidgets import QMenu
+
+from Common import TR
 
 
 class Selection:
@@ -38,6 +38,8 @@ class Selection:
                 MapCell._paint(el, posx + x, posy + y, bs, bs, p, ghost=True)
         
     def addSelection(self, data: MapDataElement, propertyPanel = True):
+        if not data:
+            return False
         if not data.src:
             return False
         if id(data) in self.dedup:
@@ -66,7 +68,7 @@ class Selection:
         self.labels.remove(x)
         self.parent.findMainWin().propertyPanel.update()
         
-    def move(self, dx, dy):
+    def moveEnd(self, dx, dy):
         self.parent.data.begin()
         d: MapData = self.parent.data
         for l in self.labels:
@@ -171,6 +173,8 @@ class DragController:
             return
         if not self.visible:
             return
+        if self.dragtonorm == self.startnorm:
+            return
         DragController._paint(self.startx, self.starty, self.dragtox, self.dragtoy, p)
         
     def _paint(startx, starty, dragtox, dragtoy, p: QPainter):
@@ -194,10 +198,56 @@ class Ruler:
     Width = 20
     Background = QColor(255, 255, 255)
     Cursor = QColor(200, 200, 200)
+    Corner = QBrush(QColor(0, 0, 0), QtCore.Qt.BrushStyle.BDiagPattern)
+    HVPen = QPen(QColor(190, 190, 190), 1, QtCore.Qt.PenStyle.DashLine)
 
     def __init__(self, parent) -> None:
         self.parent = parent
         self.currentXY = (sys.maxsize, sys.maxsize)
+        self.hlines = set()
+        self.vlines = set()
+
+    def mousePress(self, a0: QMouseEvent) -> bool:
+        d, _, _ = self.parent.findCellUnder(a0)
+        if not d:
+            return False
+        if a0.buttons() & QtCore.Qt.MouseButton.LeftButton:
+            if a0.x() < Ruler.Width: # quick row selection
+                self.parent.selector.addRowCol(self.parent.data, a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier, y=d.y)
+                return True
+            if a0.y() < Ruler.Width: # quick column selection
+                self.parent.selector.addRowCol(self.parent.data, a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier, x=d.x)
+                return True
+        if a0.buttons() & QtCore.Qt.MouseButton.RightButton:
+            if not (a0.x() < Ruler.Width or a0.y() < Ruler.Width):
+                return False
+            m = QMenu(self.parent)
+            if a0.x() < Ruler.Width: # add hline
+                if d.y in self.hlines:
+                    a = m.addAction(TR('Remove Line'))
+                    a.triggered.connect(lambda v: self.hlines.remove(d.y))
+                else:
+                    a = m.addAction(TR('Add Line'))
+                    a.triggered.connect(lambda v: self.hlines.add(d.y))
+            else:
+                if d.x in self.vlines:
+                    a = m.addAction(TR('Remove Line'))
+                    a.triggered.connect(lambda v: self.vlines.remove(d.x))
+                else:
+                    a = m.addAction(TR('Add Line'))
+                    a.triggered.connect(lambda v: self.vlines.add(d.x))
+            m.popup(self.parent.mapToGlobal(a0.pos()))
+            return True
+        return False
+
+    def _drawLine(self, x, y, h, p: QPainter):
+        p.save()
+        p.setPen(Ruler.HVPen)
+        if h:
+            p.drawLine(x, y, x + self.parent.width(), y)
+        else:
+            p.drawLine(x, y, x, y + self.parent.height())
+        p.restore()
 
     def paint(self, p: QPainter):
         # hack
@@ -221,6 +271,8 @@ class Ruler:
             iy = int((y - yy) / blockSize)
             if iy == old.currentXY[1]:
                 p.fillRect(0, y + sy, width, blockSize, Ruler.Cursor)
+            if iy in old.hlines:
+                old._drawLine(0, y + sy + blockSize / 2, True, p)
 
             if (y - yy) % smallstep != 0:
                 p.drawLine(0, y + sy, width / 4, y + sy)
@@ -235,9 +287,14 @@ class Ruler:
 
         p.fillRect(0, 0, self.width(), width, Ruler.Background)
         for x in range(0, self.width() + blockSize, blockSize):
+            # x + sx: on-canvas x coord
+            if x + sx < width:
+                continue
             ix = int((x - xx) / blockSize)
             if ix == old.currentXY[0]:
                 p.fillRect(x + sx, 0, blockSize, width, Ruler.Cursor)
+            if ix in old.vlines:
+                old._drawLine(x + sx + blockSize / 2, 0, False, p)
 
             if (x - xx) % smallstep != 0:
                 p.drawLine(x + sx, 0, x + sx, width / 4)
@@ -245,8 +302,21 @@ class Ruler:
             x = x + sx
             p.drawLine(x, 0, x, width)
             p.drawText(QtCore.QRect(x + 1, 0, smallstep, width), optX, str(ix))
-        p.drawLine(0, width, self.width(), width)
+        p.drawLine(width, width, self.width(), width)
+
+        p.drawLine(width, 0, width, width)
+        p.drawLine(0, width, width, width)
+        p.fillRect(0, 0, width, width, Ruler.Corner)
 
         p.drawRect(0, 0, self.width(), self.height())
 
         p.restore()
+
+    def todict(self):
+        return [list(self.hlines), list(self.vlines)]
+
+    def fromdict(self, d):
+        if not isinstance(d, list) or len(d) != 2:
+            return
+        self.hlines = set(d[0])
+        self.vlines = set(d[1])

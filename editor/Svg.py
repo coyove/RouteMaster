@@ -274,10 +274,8 @@ class SvgBar(QWidget):
     
     def mousePressEvent(self, a0: QtGui.QMouseEvent) -> None:
         self.currentHover = a0.x() // SvgBar.size
-        if a0.buttons() & QtCore.Qt.MouseButton.RightButton:
-            self.currentDragFrom = self.currentHover
-            return super().mousePressEvent(a0)
-        if self.currentHover < len(self.sources) and not self.onDelete:
+        self.currentDragFrom = self.currentHover
+        if self.currentHover < len(self.sources) and not self.onDelete: # switch to map view and ghost hold
             self.findMainWin().ghostHoldSvgSource(self.sources[self.currentHover])
             self.findMainWin().mapview.setFocus()
         self.repaint()

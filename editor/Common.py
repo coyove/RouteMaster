@@ -35,6 +35,8 @@ NEW_LINE = bytes([0xA])
 
 AP = argparse.ArgumentParser()
 
+FLAGS = {}
+
 # these svg files cannot be rendered properly by Qt
 PNG_POLYFILLS = set(filter(lambda x: x.strip(), """
 BSicon_BLaq.svg

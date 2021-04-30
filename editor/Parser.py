@@ -1,3 +1,6 @@
+from MapData import MapDataElement
+
+
 def parseBS(s: str):
     i = 0
     buf = ""
@@ -38,6 +41,48 @@ def parseBS(s: str):
             del rows[i]
 
     return rows
+
+def filterBS(rows):
+    c = []
+    rowsEl, maxRowWidth = [], 0
+    for y in range(len(rows)):
+        x = 0
+        rowEl = []
+        while x < len(rows[y]):
+            d = rows[y][x]
+            if not d:
+                x = x + 1
+                continue
+            el = MapDataElement.createWithXY(x, y, d)
+            if el:
+                c.append(el)
+                rowEl.append(el)
+            elif x == 0:
+                d = str(d)
+                for xx in range(1, len(rows[y])):
+                    el = MapDataElement.createWithXY(x, y, rows[y][xx])
+                    if el:
+                        el.text, el.textAlign, el.textPlacement = d, 'r', 'l'
+                        c.append(el)
+                        rowEl.append(el)
+                        rows[y][0:xx] = []
+                        break
+                    else:
+                        d = d + str(rows[y][xx])
+            elif c:
+                el: MapDataElement = c[-1]
+                el.text, el.textAlign, el.textPlacement = str(d), 'l', 'r'
+            x = x + 1
+        if rowEl:
+            maxRowWidth = max(rowEl[-1].x, maxRowWidth)
+            rowsEl.append(rowEl)
+    maxRowWidth = maxRowWidth // 2 * 2 + 1 # keep it odd
+    for row in rowsEl:
+        prepend = (maxRowWidth - row[-1].x) // 2
+        if prepend > 0:
+            for el in row:
+                el.x = el.x + prepend
+    return c
     
 if __name__ == "__main__":
     print(parseBS(r"""

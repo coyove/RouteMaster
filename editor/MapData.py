@@ -13,7 +13,7 @@ from Common import BS
 from Svg import SvgSource
 
 class MapDataElement:
-    def createWithXY(parent, x, y, id):
+    def createWithXY(x, y, id):
         sid, fn = SvgSource.Search.guess(id[0] if isinstance(id, list) else id)
         if not sid and isinstance(id, list):
             for i in range(1, len(id)):
@@ -152,6 +152,19 @@ class MapDataElement:
             # print(r)
             return r
         return r, option
+
+    def calcActualWidthX(self, w, h):
+        def adv(w, drawWidth, xOffsetPercent):
+            xOffsetPercent = xOffsetPercent % 1
+            return int(xOffsetPercent * w) + drawWidth
+        lastXOffset = self.startXOffset
+        right = 0
+        right = max(right, adv(w, h * self.src._ratio, lastXOffset))
+        lastXOffset = lastXOffset + self.src._ratio
+        for s in self.cascades:
+            right = max(right, adv(w, h * s._ratio, lastXOffset))
+            lastXOffset = lastXOffset + s._ratio
+        return right
     
 class MapData: 
     def __init__(self, parent) -> None:
@@ -284,17 +297,7 @@ class MapCell:
             lastXOffset = lastXOffset + s._ratio
 
     def _paintRect(s: MapDataElement, x, y, w, h, p: QPainter):
-        def adv(x, w, drawWidth, xOffsetPercent):
-            xOffsetPercent = xOffsetPercent % 1
-            return x + int(xOffsetPercent * w) + drawWidth
-        lastXOffset = s.startXOffset
-        right = 0
-        right = max(right, adv(x, w, h * s.src._ratio, lastXOffset))
-        lastXOffset = lastXOffset + s.src._ratio
-        for s in s.cascades:
-            right = max(right, adv(x, w, h * s._ratio, lastXOffset))
-            lastXOffset = lastXOffset + s._ratio
-        w = right - x
+        w = s.calcActualWidthX(w, h)
         p.drawRect(x, y, w, h)
         p.fillRect(x, y, w, h, QColor(255, 255, 0, 90))
         
