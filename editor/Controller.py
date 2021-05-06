@@ -90,6 +90,12 @@ class HoverController:
     def __init__(self, parent) -> None:
         self.parent = parent
         self.labels: typing.List[MapDataElement] = []
+
+    def cats(self):
+        a = set()
+        for l in self.labels:
+            a.add(l.src.svgId)
+        return list(a)
         
     def clear(self):
         self.labels = self.labels[:0]
@@ -309,7 +315,7 @@ class Ruler:
         p.drawLine(0, width, width, width)
         p.fillRect(0, 0, width, width, Ruler.Corner)
 
-        p.drawRect(0, 0, self.width(), self.height())
+        p.drawRect(0, 0, self.width() - 1, self.height() - 1)
 
         p.restore()
 

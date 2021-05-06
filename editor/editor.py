@@ -174,6 +174,8 @@ class Window(QMainWindow):
         self._addMenu(TR('&File'), TR('&File Properties...'), 'F3', lambda x: FileProperty(self, self.fileMeta).exec_())
         self._addMenu(TR('&File'), '-')
         self._addMenu(TR('&File'), TR('&Load Icons Package...'), '', lambda x: load_package(force=True))
+        self._addMenu(TR('&File'), '-')
+        self._addMenu(TR('&File'), TR('&Quit'), '', lambda x: self._askSave(thenQuit=True))
 
         self._addMenu(TR('&Edit'), TR('&Undo'), '', lambda x: self.mapview.actUndoRedo())
         self._addMenu(TR('&Edit'), TR('&Redo'), '', lambda x: self.mapview.actUndoRedo(redo=True))
@@ -215,7 +217,7 @@ class Window(QMainWindow):
             else:
                 self.mapview.scale = float(args.png_scale)
                 exportMapDataPng(self, args.convert, self.mapview.data)
-            print('Sucessfully export to {}'.format(args.convert))
+            print('Successfully export to {}'.format(args.convert))
             sys.exit(0)
         
     def closeEvent(self, a0: QtGui.QCloseEvent) -> None:
@@ -237,7 +239,7 @@ class Window(QMainWindow):
         self.mapview.showRuler = v
         self.mapview.repaint()
         
-    def _askSave(self):
+    def _askSave(self, thenQuit=False):
         if self.mapview.data.historyCap:
             ans = QMessageBox.question(self, TR("Save"), TR("Save current file?"),
                                        buttons=QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel)
@@ -245,6 +247,7 @@ class Window(QMainWindow):
                 return False
             if ans == QMessageBox.StandardButton.Yes:
                 self.doSave(True)
+        thenQuit and QApplication.quit()
         return True
                 
     def doNew(self, v):
@@ -398,6 +401,12 @@ QtCore.qDebug(time.strftime("[START] %m-%d-%Y %H:%M:%S"))
 
 app = QApplication([])
 app.setWindowIcon(QtGui.QIcon("logo.ico"))
+
+if sys.platform == "win32":
+    import ctypes
+    myappid = u'mycompany.myproduct.subproduct.version' # arbitrary string
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+
 trdir = QtCore.QLibraryInfo.location(QtCore.QLibraryInfo.LibraryLocation.TranslationsPath)
 tr = QtCore.QTranslator()
 if not os.path.exists(os.path.join(trdir, "qtbase_zh_CN")):

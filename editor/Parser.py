@@ -1,3 +1,4 @@
+from Common import BS
 from MapData import MapDataElement
 
 
@@ -105,10 +106,14 @@ def filterBS(rows):
             rowsEl.append(rowEl)
     maxRowWidth = maxRowWidth // 2 * 2 + 1 # keep it odd
     for row in rowsEl:
+        if not row:
+            continue
         prepend = (maxRowWidth - row[-1].x) // 2
         if prepend > 0:
             for el in row:
                 el.x = el.x + prepend
+        if row[-1].text:
+            row[-1].textX = (maxRowWidth - row[-1].x) * BS
     return c
     
 if __name__ == "__main__":

@@ -28,6 +28,7 @@ dict = {
     "&Center": "居中(&C)",
     "&Ruler": "标尺(&R)",
     "&Logs": "日志(&L)",
+    "&Quit": "退出(&Q)",
     "Clear Logs": "清空日志",
     "Center &Selected": "居中选中(&S)",
     "100% &Zoom": "100%缩放(&Z)",
@@ -47,10 +48,10 @@ dict = {
     "Bottom": "底",
     "Left": "左",
     "Right": "右",
-    "Alignment": "对齐",  # not translated
-    "Placement": "位置",  # not translated
-    "Offset X": "偏移X",  # not translated
-    "Offset Y": "偏移Y",  # not translated
+    "Alignment": "对齐",
+    "Placement": "位置",
+    "Offset X": "偏移X",
+    "Offset Y": "偏移Y",
     'Select by Text': "按文案选择块",
     'Text:': "文案:",
     "Send Feedbacks": "反馈（邮件）",
@@ -59,7 +60,7 @@ dict = {
     "Bounding": "边界",
     "Text Bounding": "文字边界",
     "Total Blocks": "块总数",
-    'Overlay: Start X Percentage': "堆叠: 起始偏移量%",
+    'Overlay: Start X Percentage': "堆叠: 起始偏移量",
     "Add Line": "添加辅助线",
     "Remove Line": "删除辅助线",
 

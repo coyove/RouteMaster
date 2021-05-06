@@ -168,7 +168,6 @@ BSicon_dHUBa@f-Lq.svg
 BSicon_GRZTa.svg
 BSicon_KBL3.svg
 BSicon_uhkLLSTRr%2B1.svg
-BSicon_KBL1.svg
 BSicon_ukLLSTR2%2Br.svg
 BSicon_HUBtf.svg
 BSicon_uLSTRq.svg

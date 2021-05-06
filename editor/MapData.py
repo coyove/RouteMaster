@@ -124,7 +124,7 @@ class MapDataElement:
             y = y + blockSize
 
         option = QtCore.Qt.AlignmentFlag.AlignCenter
-        bb = int(1000 * scale)
+        bb = int(1500 * scale)
         dx = int(self.textX * scale)
         dy = int(self.textY * scale)
         if self.textAlign == 'c':

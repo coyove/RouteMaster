@@ -1,16 +1,13 @@
 import json
-import random
-import re
-import math
-import typing
-
-from PyQt5 import QtGui
-from PyQt5 import QtCore, QtSvg
-from PyQt5.QtGui import QBrush, QColor, QFont, QFontMetrics, QPainter, QPalette, QPen, QPixmap
-from PyQt5.QtWidgets import QComboBox, QListView, QMainWindow, QPushButton, QTableWidget, QTableWidgetItem, QToolBar, QWidget 
-from urllib.parse import quote, unquote
-from Common import BS, PNG_POLYFILLS
 import os
+from urllib.parse import quote, unquote
+
+from PyQt5 import QtCore, QtGui, QtSvg
+from PyQt5.QtGui import QBrush, QColor, QPainter, QPen, QPixmap
+from PyQt5.QtWidgets import QMainWindow, QWidget
+
+from Common import BS, PNG_POLYFILLS, TR
+
 
 def _quote(s: str):
     s = quote(s)
@@ -90,14 +87,14 @@ class SvgSource:
         fn, p = SvgSource.Search.guess(id)
         if fn:
             s = SvgSource(fn, p, BS, BS)
-            return s.svgValid and s or None
+            return s
         return None
     
     def getcreate(id, fn, w, h):
         if id in SvgSource.Manager:
             return SvgSource.Manager[id]
         s = SvgSource(id, fn, w, h)
-        return s.svgValid and s or None
+        return s
     
     _rotateStepper = 0
     def tryRotate(id: str, q=False, c1234=False):
@@ -128,20 +125,30 @@ class SvgSource:
     def __init__(self, id, svgData: bytes, w = 0, h = 0) -> None:
         self.svgData = svgData
         self.svgId = id
+        self._ratio = 1
+        self.svgValid = True
         if id in PNG_POLYFILLS:
             self._renderer = QPixmap(svgData.removesuffix(".svg") + ".png")
-            self._ratio = self._renderer.width() / self._renderer.height()
-            self.svgValid = True
+            # print(self._renderer.height(), svgData)
+            if not self._renderer.height() or not self._renderer.width():
+                QtCore.qDebug("{}/{} not valid".format(id, svgData).encode("utf-8"))
+                self.svgValid = False
+            else:
+                self._ratio = self._renderer.width() / self._renderer.height()
         else:
             self._renderer = QtSvg.QSvgWidget(SvgSource.Parent) # SvgRenderer can't render, don't know why
             self._renderer.load(svgData)
             self._renderer.setVisible(False)
             self.svgValid = self._renderer.renderer().isValid()
-            self._ratio = self._renderer.sizeHint().width() / self._renderer.sizeHint().height()
+            if self.svgValid:
+                self._ratio = self._renderer.sizeHint().width() / self._renderer.sizeHint().height()
+            else:
+                self._ratio = 1
         self._w, self._h = w, h
-        if not self.svgValid:
-            return
         SvgSource.Manager[self.svgId] = self
+
+    def cleanSvgId(self):
+        return unquote(self.svgId.replace('bsicon_', '').replace('.svg', '').replace('BSicon_', ''))
         
     def overrideSize(self, w, h):
         self._w, self._h = w, h
@@ -160,6 +167,15 @@ class SvgSource:
             QtCore.qDebug("SvgSource.source: {}".format(e))
 
     def paint(self, x: int, y: int, w: int, h: int, p: QPainter, ghost=False, xOffsetPercent=0):
+        if not self.svgValid:
+            p.drawRect(x, y, w, h)
+            p.save()
+            p.setPen(QPen(QColor(255, 0, 0)))
+            p.drawText(QtCore.QRect(x + 2, y + 2, w - 4, h - 4), QtCore.Qt.AlignmentFlag.AlignCenter | QtCore.Qt.TextFlag.TextWrapAnywhere, self.cleanSvgId())
+            p.drawLine(x, y, x + w, y + h)
+            p.drawLine(x + w, y, x, y + h)
+            p.restore()
+            return
         # print(xOffsetPercent, xOffsetPercent % 1)
         xOffsetPercent = xOffsetPercent % 1
         x = x + int(xOffsetPercent * w)
@@ -217,7 +233,7 @@ class SvgBar(QWidget):
     def paintEvent(self, a0: QtGui.QPaintEvent) -> None:
         p = QPainter(self)
         p.fillRect(0, 0, self.width(), self.height(), QColor(255 ,255, 255))
-        p.drawRect(0, 0, self.width(), self.height())
+        p.drawRect(0, 0, self.width() - 1, self.height() - 1)
         for i in range(len(self.sources)):
             x = i * SvgBar.size
             s: SvgSource = self.sources[i]
@@ -243,7 +259,7 @@ class SvgBar(QWidget):
                     p.drawRect(r)
                     p.fillRect(r, SvgBar.dashBrush)
                     p.restore()
-                    p.drawText(r, QtCore.Qt.AlignmentFlag.AlignCenter, chr(0xbb + int((1 - s._ratio) / 0.25)))
+                    # p.drawText(r, QtCore.Qt.AlignmentFlag.AlignCenter, chr(0xbb + int((1 - s._ratio) / 0.25)))
                 p.drawRect(x + m, m, w, sz)
             opt = QtGui.QTextOption(QtCore.Qt.AlignmentFlag.AlignCenter)
             opt.setWrapMode(QtGui.QTextOption.WrapMode.WrapAnywhere)
@@ -255,8 +271,7 @@ class SvgBar(QWidget):
                 p.setPen(SvgBar.dragPen)
                 p.drawLine(x + 1, 0, x + 1, SvgBar.size * 1.5)
                 p.restore()
-            p.drawText(QtCore.QRectF(x + 4, SvgBar.size, SvgBar.size - 8, SvgBar.size / 2),
-                       unquote(s.svgId.replace('bsicon_', '').replace('.svg', '').replace('BSicon_', '')), option=opt)
+            p.drawText(QtCore.QRectF(x + 4, SvgBar.size, SvgBar.size - 8, SvgBar.size / 2), s.cleanSvgId(), option=opt)
             p.restore()
         p.end()
         return super().paintEvent(a0)

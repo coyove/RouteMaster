@@ -484,6 +484,21 @@ class Map(QWidget):
     def wheelEvent(self, a0: QtGui.QWheelEvent) -> None:
         if self.selector.labels and self.pressHoldSel:
             return super().wheelEvent(a0)
+        
+        if a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier:
+            c = self.hover.cats()
+            if len(c) == 1:
+                if a0.angleDelta().y() > 0:
+                    el = self.hover.labels[-1].dup()
+                    if el.src.svgId.endswith("q.svg"):
+                        el.x = el.x + 1
+                    else:
+                        el.y = el.y + 1
+                    self.hover.labels.append(el)
+                elif len(self.hover.labels) > 1:
+                    self.hover.labels = self.hover.labels[:-1]
+                self.repaint()
+            return super().wheelEvent(a0)
             
         lastScale = self.scale
         if a0.angleDelta().y() > 0:

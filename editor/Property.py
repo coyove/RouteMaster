@@ -6,7 +6,7 @@ from PyQt5 import QtCore
 from PyQt5.QtGui import QFontDatabase
 from PyQt5.QtWidgets import (QApplication, QComboBox, QDialog, QHBoxLayout, QLabel,
                              QLineEdit, QListWidget, QMainWindow, QPushButton,
-                             QScrollArea, QSizePolicy, QSpinBox, QTableWidget,
+                             QScrollArea, QSizePolicy, QSlider, QSpinBox, QTableWidget,
                              QTableWidgetItem, QTabWidget, QTextEdit,
                              QTreeView, QVBoxLayout, QWidget)
 
@@ -42,6 +42,17 @@ class Property(QWidget):
         self.svgId = QLabel('N/A', self)
         self.textAttrBox.addWidget(self._title(TR('Type')))
         self.textAttrBox.addWidget(self.svgId)
+
+        self.startXOffsetLabel = self._title(TR('Overlay: Start X Percentage'))
+        self.textAttrBox.addWidget(self.startXOffsetLabel)
+        self.startXOffset = QSlider(self)
+        self.startXOffset.setOrientation(QtCore.Qt.Orientation.Horizontal)
+        self.startXOffset.setMinimum(0)
+        self.startXOffset.setMaximum(3)
+        self.startXOffset.valueChanged.connect(lambda e: self.offsetChanged('xo', self.startXOffset.value() * 0.25))
+        self.textAttrBox.addWidget(self.startXOffset)
+
+
 
         self.textAttrBox.addWidget(self._title(TR('Text')))
         self.text = QTextEdit(self)
@@ -89,12 +100,6 @@ class Property(QWidget):
         self.textX.valueChanged.connect(lambda e: self.offsetChanged('x', e))
         self.textY.valueChanged.connect(lambda e: self.offsetChanged('y', e))
         self._addBiBoxInTextAttrBox(self._title(TR("Offset X")), self.textX, self._title(TR("Offset Y")), self.textY)
-
-        self.textAttrBox.addWidget(self._title(TR('Overlay: Start X Percentage')))
-        self.startXOffset = QComboBox(self)
-        self.startXOffset.addItems(["0", "25", "50", "75"])
-        self.startXOffset.currentIndexChanged.connect(lambda e: self.offsetChanged('xo', int(self.startXOffset.currentText()) / 100))
-        self.textAttrBox.addWidget(self.startXOffset)
 
         # self.setLayout(self.textAttrBox)
         self.scrollView.setWidget(self.textAttr)
@@ -204,7 +209,8 @@ class Property(QWidget):
     def offsetChanged(self, t, v):
         if t == 'x' or t == 'y':
             self._foreach(lambda x: x.set(t == 'x' and 'textX' or 'textY', v))
-        else:
+        else: # xo
+            self.startXOffsetLabel.setText(TR('Overlay: Start X Percentage') + ' ' + str(int(v * 100)) + "%")
             self._foreach(lambda x: x.set("startXOffset", v))
         
     def sizeChanged(self, e):
@@ -261,7 +267,7 @@ class Property(QWidget):
         self._setAP(self.textPlace, e.textPlacement)
         self.textX.setValue(e.textX)
         self.textY.setValue(e.textY)
-        self.startXOffset.setCurrentText(str(int(e.startXOffset * 100)))
+        self.startXOffset.setValue(int(e.startXOffset / 0.25))
         self.updating = False
         
     def _setAP(self, w: QComboBox, d):
