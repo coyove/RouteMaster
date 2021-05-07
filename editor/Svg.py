@@ -16,22 +16,13 @@ def _quote(s: str):
 class SvgSearch:
     def __init__(self, path: str) -> None:
         self.path = path.removesuffix("/")
-        fn = self.path + '/meta.json'
-
-        if not os.path.exists(fn):
-            self.data = {}
-            self.files = {}
-            return
-
-        with open(fn, 'rb') as f:
-            data = json.load(f)
-
-        self.data = data
+        self.reload()
+    
+    def reload(self):
         self.files = {}
-
-        for k in data:
-            for n in data[k]:
-                self.files[n.lower()] = n
+        for f in os.listdir(self.path):
+            if f.endswith(".svg"):
+                self.files[f.lower()] = f
                 
     def guess(self, s: str):
         if not s:
@@ -49,19 +40,8 @@ class SvgSearch:
         
     def search(self, q: str):
         q = q.strip().lower()
-        scores = {}
-        for p in q.split(' '):
-            if not p in self.data:
-                continue
-            for c in self.data[p]:
-                if c in scores:
-                    scores[c] = scores[c] + 1
-                else:
-                    scores[c] = 1
         c = []
-        for k in scores:
-            c.append((k, scores[k]))
-            
+
         test = "bsicon_" + _quote(q) + ".svg"
         if test in self.files:
             c.append((self.files[test], 1e8))
@@ -74,7 +54,6 @@ class SvgSearch:
             
         c = sorted(c, key=lambda x: (x[1], x[0]), reverse=True)
         return list(map(lambda x: (x[0], self.path + "/" + x[0]), c))
-
 
 class SvgSource:
     Manager = {}
@@ -96,7 +75,6 @@ class SvgSource:
         s = SvgSource(id, fn, w, h)
         return s
     
-    _rotateStepper = 0
     def tryRotate(id: str, q=False, c1234=False):
         def check(fn):
             # print(fn)
@@ -107,19 +85,6 @@ class SvgSource:
             if id.endswith('q'):
                 return check(id[:-1] + ".svg")
             return check(id + "q.svg")
-        
-        # if c1234:
-        #     for i in range(1, 16):
-        #         step = SvgSource._rotateStepper = SvgSource._rotateStepper + 1
-        #         for m in re.compile(r'\d').finditer(id):
-        #             m: re.Match
-        #             print(id)
-        #             id = id[:m.start()] + str(step % 4 + 1) + id[m.end():]
-        #             step = step / 4
-        #         f = check(id + ".svg")
-        #         if f:
-        #             return f
-
         return
     
     def __init__(self, id, svgData: bytes, w = 0, h = 0) -> None:
@@ -271,7 +236,7 @@ class SvgBar(QWidget):
                 p.setPen(SvgBar.dragPen)
                 p.drawLine(x + 1, 0, x + 1, SvgBar.size * 1.5)
                 p.restore()
-            p.drawText(QtCore.QRectF(x + 4, SvgBar.size, SvgBar.size - 8, SvgBar.size / 2), s.cleanSvgId(), option=opt)
+            p.drawText(QtCore.QRectF(x + 4, SvgBar.size, SvgBar.size - 8, SvgBar.size / 2 - 4), s.cleanSvgId(), option=opt)
             p.restore()
         p.end()
         return super().paintEvent(a0)

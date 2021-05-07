@@ -1,9 +1,10 @@
+import collections
 import copy
 import json
 import math
+import random
 import sys
 import typing
-import collections
 
 from PyQt5 import QtCore, QtGui
 from PyQt5.QtCore import QRect, QRectF, qDebug
@@ -11,6 +12,7 @@ from PyQt5.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen
 
 from Common import BS
 from Svg import SvgSource
+
 
 class MapDataElement:
     def createWithXY(x, y, id):
@@ -169,7 +171,7 @@ class MapDataElement:
 class MapData: 
     def __init__(self, parent) -> None:
         self.parent = parent
-        self.data: typing.Dict[typing.Tuple(int, int), MapDataElement] = {}
+        self.data = XYDict()
         self.history = []
         self.historyCap = 0
         
@@ -333,3 +335,100 @@ class MapCell:
         w, h = int(data.src.width() * scale), int(data.src.height() * scale)
         self.x = int(x - (w - BS * scale) / 2)
         self.y = int(y - (h - BS * scale) / 2)
+
+class XYDict:
+    _offset = 32768
+    _list = []
+
+    def less_zorder(lhs, rhs) -> bool:
+        msd = 1 if XYDict.less_msb(lhs[0] ^ rhs[0], lhs[1] ^ rhs[1]) else 0
+        return lhs[msd] < rhs[msd]
+
+    def less_msb(x: int, y: int) -> bool:
+        return x < y and x < (x ^ y)
+
+    def _bisect(self, xy):
+        i, j = 0, len(self._list)
+        while i < j:
+            h = (i + j) // 2
+            if XYDict.less_zorder(self._list[h][0], xy):
+                i = h + 1 
+            else:
+                j = h
+        return i
+    
+    @classmethod
+    def _xy(cls, x, y):
+        if x < -cls._offset or y < -cls._offset or x >= cls._offset or y >= cls._offset:
+            raise BaseException("wtf?")
+        return (x + cls._offset, y + cls._offset)
+
+    def __getitem__(self, k):
+        assert isinstance(k, tuple)
+        xy = XYDict._xy(k[0], k[1])
+        i = self._bisect(xy)
+        if i < len(self._list) and self._list[i][0] == xy:
+            return self._list[i][1]
+        return None
+
+    def __setitem__(self, k, d):
+        assert isinstance(k, tuple)
+        xy = XYDict._xy(k[0], k[1])
+        i = self._bisect(xy)
+        if i < len(self._list) and self._list[i][0] == xy:
+            self._list[i] = (xy, d)
+        else:
+            self._list.insert(i, (xy, d))
+
+    def __delitem__(self, k):
+        assert isinstance(k, tuple)
+        xy = XYDict._xy(k[0], k[1])
+        i = self._bisect(xy)
+        if i < len(self._list) and self._list[i][0] == xy:
+            self._list = self._list[:i] + self._list[i+1:]
+
+    class _Iterator:
+        def __init__(self, d) -> None:
+            self._index = 0
+            self._data = d
+
+        def __next__(self):
+            if self._index >= len(self._data):
+                raise StopIteration
+            self._index = self._index + 1
+            xy = self._data[self._index - 1][0]
+            return (xy[0] - XYDict._offset, xy[1] - XYDict._offset)
+
+    def __iter__(self):
+        return XYDict._Iterator(self._list)
+
+    def searchindex(self, x, y):
+        xy = XYDict._xy(x, y)
+        return self._bisect(xy)
+
+if __name__ == "__main__":
+    d = XYDict()
+    dr = {}
+    for i in range(int(1e4)):
+        x = random.randint(0, 30000)
+        y = random.randint(0, 30000)
+        dd = "{} {}".format(x, y)
+        dr[(x,y)] = dd
+        d[(x, y)] = dd
+    
+    for i in range(int(1e3)):
+        k, v = dr.popitem()
+        del d[k]
+
+    for k in dr:
+        v = dr[k]
+        v2 = d[k]
+        if v != v2:
+            raise ValueError
+
+    for k in d:
+        v = dr[k]
+        v2 = d[k]
+        if v != v2:
+            print(v, v2)
+            raise ValueError

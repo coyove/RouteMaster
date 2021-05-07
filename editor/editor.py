@@ -408,6 +408,7 @@ if sys.platform == "win32":
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 
 trdir = QtCore.QLibraryInfo.location(QtCore.QLibraryInfo.LibraryLocation.TranslationsPath)
+QtCore.qDebug("translation dir: " + trdir)
 tr = QtCore.QTranslator()
 if not os.path.exists(os.path.join(trdir, "qtbase_zh_CN")):
     shutil.copy2('i18n/qtbase_zh_CN.qm', os.path.join(trdir, "qtbase_zh_CN"))

@@ -3,6 +3,7 @@ import math
 import random
 import sys
 import typing
+import re
 from json.decoder import JSONDecodeError
 
 import PyQt5.QtGui as QtGui
@@ -488,11 +489,23 @@ class Map(QWidget):
         if a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier:
             c = self.hover.cats()
             if len(c) == 1:
-                if a0.angleDelta().y() > 0:
+                v = a0.angleDelta().y() or a0.angleDelta().x()
+                if v > 0:
                     el = self.hover.labels[-1].dup()
-                    if el.src.svgId.endswith("q.svg"):
+                    el.cascades = []
+                    id = el.src.svgId
+                    if id.endswith("q.svg"):
                         el.x = el.x + 1
                     else:
+                        if re.search(r"c\d+(x\d+)?\.svg$", id):
+                            if '3' in id or '1' in id:
+                                el.x = el.x + 1
+                            else:
+                                el.x = el.x - 1
+                        elif ('3' in id and '%2B1' in id) or ('1' in id and '%2B3' in id):
+                            el.x = el.x - 1
+                        elif ('4' in id and '%2B2' in id) or ('2' in id and '%2B4' in id):
+                            el.x = el.x + 1
                         el.y = el.y + 1
                     self.hover.labels.append(el)
                 elif len(self.hover.labels) > 1:

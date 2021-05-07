@@ -1,3 +1,4 @@
+from Svg import SvgSource
 import os
 import time
 import zipfile
@@ -82,7 +83,9 @@ class LoaderTask(QtCore.QThread):
             f = open(BLOCK_DIR + "/finished", 'w+')
             f.write(str(int(time.time())))
             f.close()
+
         self.taskFinished.emit()
+        SvgSource.Search.reload()
 
 def load_package(path=None, force=False):
     if os.path.isfile(BLOCK_DIR + '/finished') and not force:
