@@ -1,4 +1,5 @@
 import sys
+import re
 import typing
 
 from PyQt5 import QtCore, QtGui
@@ -7,10 +8,10 @@ from PyQt5.QtGui import (QBrush, QClipboard, QColor, QMouseEvent, QPainter,
 from PyQt5.QtWidgets import QMenu
 
 from Common import TR
-from MapData import MapCell, MapData, MapDataElement
+from MapData import MapDataRenderer, MapData, MapDataElement
 
 
-class Selection:
+class Selector:
     Add = 1
     Clear = 2
     
@@ -21,11 +22,11 @@ class Selection:
             
     def __init__(self, parent) -> None:
         self.parent = parent
-        self.labels: typing.List[Selection.Block] = []
+        self.labels: typing.List[Selector.Block] = []
         self.dedup = {}
         
     def paint(self, p: QPainter):
-        d: DragController = self.parent.dragger
+        d: Dragger = self.parent.dragger
         dd = d.dragtonorm - d.startnorm
         x, y = dd.x(), dd.y()
         bs = self.parent._blocksize()
@@ -33,9 +34,12 @@ class Selection:
             el: MapDataElement = l.data
             posx = l.data.x * bs + self.parent.viewOrigin[0]
             posy = l.data.y * bs + self.parent.viewOrigin[1]
-            MapCell._paintRect(el, posx, posy, bs, bs, p)
+            MapDataRenderer._paintRect(el, posx, posy, bs, bs, p)
             if x or y: # paint select-n-drag blocks if presented
-                MapCell._paint(el, posx + x, posy + y, bs, bs, p, ghost=True)
+                MapDataRenderer._paint(el, posx + x, posy + y, bs, bs, p, ghost=True)
+    
+    def __contains__(self, data):
+        return id(data) in self.dedup
         
     def addSelection(self, data: MapDataElement, propertyPanel = True):
         if not data:
@@ -44,10 +48,10 @@ class Selection:
             return False
         if id(data) in self.dedup:
             return False
-        label = Selection.Block(data)
+        label = Selector.Block(data)
         self.labels.append(label)
         self.dedup[id(data)] = label
-        self.parent.selectionEvent(Selection.Add, data)
+        self.parent.selectionEvent(Selector.Add, data)
         if propertyPanel:
             self.parent.findMainWin().propertyPanel.update()
         return True
@@ -80,13 +84,13 @@ class Selection:
     def clear(self):
         self.labels = self.labels[:0]
         self.dedup = {}
-        self.parent.selectionEvent(Selection.Clear, None)
+        self.parent.selectionEvent(Selector.Clear, None)
         self.parent.findMainWin().propertyPanel.update()
         
     def status(self):
         return "{}".format(len(self.labels))
 
-class HoverController:
+class Hover:
     def __init__(self, parent) -> None:
         self.parent = parent
         self.labels: typing.List[MapDataElement] = []
@@ -104,13 +108,35 @@ class HoverController:
         self.labels = data
         
     def paint(self, p: QPainter):
-        d: DragController = self.parent.dragger
+        d: Dragger = self.parent.dragger
         bs = self.parent._blocksize()
         x, y = d.dragtonorm.x(), d.dragtonorm.y()
         for l in self.labels:
             el: MapDataElement = l
             xx, yy = (l.x - self.labels[0].x) * bs + x, (l.y - self.labels[0].y) * bs + y
-            MapCell._paint(el, xx, yy, bs, bs, p, ghost=True)
+            MapDataRenderer._paint(el, xx, yy, bs, bs, p, ghost=True)
+
+    def incr(self):
+        el = self.labels[-1].dup()
+        el.cascades = []
+        id: str = el.src.svgId
+        if id.endswith("q.svg"):
+            el.x = el.x + 1
+        else:
+            if re.search(r"c\d+(x\d+)?\.svg$", id):
+                if '3' in id or '1' in id:
+                    el.x = el.x + 1
+                else:
+                    el.x = el.x - 1
+            elif ('3' in id and '%2B1' in id) or ('1' in id and '%2B3' in id):
+                el.x = el.x - 1
+            elif ('4' in id and '%2B2' in id) or ('2' in id and '%2B4' in id):
+                el.x = el.x + 1
+            el.y = el.y + 1
+        self.labels.append(el)
+
+    def decr(self):
+        len(self.labels) > 1 and self.labels.pop()
     
     def end(self, cascade):
         if len(self.labels) == 0:
@@ -118,14 +144,14 @@ class HoverController:
         d: MapData = self.parent.data
         d.begin()
 
-        dd: DragController = self.parent.dragger
-        d1, cell, _ = dd.parent.findCellUnder(None, QtCore.QPoint(dd.dragtox, dd.dragtoy))
-        cell: MapCell
+        dd: Dragger = self.parent.dragger
+        d1, _ = dd.parent.findCellUnder(None, QtCore.QPoint(dd.dragtox, dd.dragtoy))
         
-        if cascade and cell and d1 and len(self.labels) == 1:
-            old = cell.current.pack()
-            cell.current.cascades.append(self.labels[0].src)
-            d._appendHistoryPacked(old, cell.current.pack())
+        if cascade and d1 and len(self.labels) == 1:
+            d1: MapDataElement
+            old = d1.pack()
+            d1.cascades.append(self.labels[0].src)
+            d._appendHistoryPacked(old, d1.pack())
         elif d1:
             x, y = self.labels[0].x, self.labels[0].y
             for l in self.labels:
@@ -133,7 +159,7 @@ class HoverController:
 
         self.clear()
 
-class DragController:
+class Dragger:
     Size = 12
     pen = QPen(QColor(100, 120, 120))
     pen.setWidth(3)
@@ -166,8 +192,8 @@ class DragController:
         if not self.started:
             return 0, 0
 
-        d0, _, _ = self.parent.findCellUnder(None, QtCore.QPoint(self.startx, self.starty))
-        d1, _, _ = self.parent.findCellUnder(None, QtCore.QPoint(self.dragtox, self.dragtoy))
+        d0, _ = self.parent.findCellUnder(None, QtCore.QPoint(self.startx, self.starty))
+        d1, _ = self.parent.findCellUnder(None, QtCore.QPoint(self.dragtox, self.dragtoy))
 
         self.reset()
         if d0 and d1:
@@ -181,23 +207,23 @@ class DragController:
             return
         if self.dragtonorm == self.startnorm:
             return
-        DragController._paint(self.startx, self.starty, self.dragtox, self.dragtoy, p)
+        Dragger._paint(self.startx, self.starty, self.dragtox, self.dragtoy, p)
         
     def _paint(startx, starty, dragtox, dragtoy, p: QPainter):
         p.save()
-        p.setPen(DragController.pen)
+        p.setPen(Dragger.pen)
         p.drawLine(startx, starty, dragtox, dragtoy)
 
         p.setPen(QPen(QColor(0,0,0,0)))
         p.setBrush(QColor(100, 120, 120, 128))
         offset = 4
-        size = DragController.Size + offset
+        size = Dragger.Size + offset
         p.drawEllipse(startx - size / 2, starty - size / 2, size, size)
         p.drawEllipse(dragtox - size / 2, dragtoy - size / 2, size, size)
 
         p.setBrush(QColor(100, 120, 120))
-        p.drawEllipse(startx - DragController.Size / 2, starty - DragController.Size / 2, DragController.Size, DragController.Size)
-        p.drawEllipse(dragtox - DragController.Size / 2, dragtoy - DragController.Size / 2, DragController.Size, DragController.Size)
+        p.drawEllipse(startx - Dragger.Size / 2, starty - Dragger.Size / 2, Dragger.Size, Dragger.Size)
+        p.drawEllipse(dragtox - Dragger.Size / 2, dragtoy - Dragger.Size / 2, Dragger.Size, Dragger.Size)
         p.restore()
 
 class Ruler:
@@ -215,7 +241,7 @@ class Ruler:
         self.vlines = set()
 
     def mousePress(self, a0: QMouseEvent) -> bool:
-        d, _, _ = self.parent.findCellUnder(a0)
+        d, _ = self.parent.findCellUnder(a0)
         if not d:
             return False
         if a0.buttons() & QtCore.Qt.MouseButton.LeftButton:

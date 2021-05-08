@@ -8,7 +8,7 @@ import typing
 
 from PyQt5 import QtCore, QtGui
 from PyQt5.QtCore import QRect, QRectF, qDebug
-from PyQt5.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen
+from PyQt5.QtGui import QColor, QFont, QFontMetrics, QPainter, QPainterPath, QPen
 
 from Common import BS
 from Svg import SvgSource
@@ -149,7 +149,7 @@ class MapDataElement:
         r.setHeight(r.height() + dy)
 
         if measure:
-            m = QFontMetrics(MapCell.FontsManager.get(self.textFont, int(self.textSize * scale)))
+            m = QFontMetrics(MapDataRenderer.FontsManager.get(self.textFont, int(self.textSize * scale)))
             r = m.boundingRect(r, option, self.text)
             # print(r)
             return r
@@ -171,7 +171,7 @@ class MapDataElement:
 class MapData: 
     def __init__(self, parent) -> None:
         self.parent = parent
-        self.data = XYDict()
+        self.data = {}
         self.history = []
         self.historyCap = 0
         
@@ -269,7 +269,7 @@ class MapData:
             d = MapDataElement.unpack(h)
             self._put(d.x, d.y, d)
 
-class MapCell:
+class MapDataRenderer:
     _selectedTextPen = QPen(QColor(0, 0, 255, 120)) 
 
     class FontsManager:
@@ -287,148 +287,36 @@ class MapCell:
     
     def __init__(self, parent) -> None:
         self.current: MapDataElement = None
-        self.moving = False
         self.parent = parent
 
-    def _paint(s: MapDataElement, x, y, w, h, p, ghost=False):
+    def _paint(s: MapDataElement, x, y, w, h, p: QPainter, ghost=False):
         lastXOffset = s.startXOffset
-        s.src.paint(x, y, w, h, p, ghost=ghost, xOffsetPercent=lastXOffset)
+        s.src.paint(x, y, w, h, p, ghost=ghost and len(s.cascades) == 0, xOffsetPercent=lastXOffset)
         lastXOffset = lastXOffset + s.src._ratio
-        for s in s.cascades:
-            s.paint(x, y, w, h, p, ghost=ghost, xOffsetPercent=lastXOffset)
-            lastXOffset = lastXOffset + s._ratio
+        for sc in s.cascades:
+            # ghost: last one is the top most, so draw ghost overlay
+            sc.paint(x, y, w, h, p, ghost=ghost and sc == s.cascades[-1], xOffsetPercent=lastXOffset)
+            lastXOffset = lastXOffset + sc._ratio
 
     def _paintRect(s: MapDataElement, x, y, w, h, p: QPainter):
         w = s.calcActualWidthX(w, h)
         p.drawRect(x, y, w, h)
         p.fillRect(x, y, w, h, QColor(255, 255, 0, 90))
-        
-    def paint(self, p: QPainter): 
-        blockSize = self.parent._blocksize()
-        scale = self.parent.scale
-        w, h = self.current.src.width() * scale, self.current.src.height() * scale
-        if self.moving and self.parent.currentData != self.current:
-            p.drawRect(self.posx, self.posy, blockSize, blockSize)
-        elif self.current:
-            MapCell._paint(self.current, self.x, self.y, w, h, p)
-            if not self.current.text:
-                return
-            font = MapCell.FontsManager.get(self.current.textFont, int(self.current.textSize * scale))
-            p.save()
-            p.setFont(font)
-            
-            if self.current == self.parent.currentData:
-                p.setPen(MapCell._selectedTextPen)
-
-            text = self.current.text
-            r, option = self.current.textbbox(scale, self.posx, self.posy)
-            # print(text)
-            p.drawText(QRectF(r.x(), r.y(), r.width(), r.height()), text, option=QtGui.QTextOption(option))
-            p.restore()
-
-            self.current.textbbox(scale)
-        
-    def loadResizeMove(self, data: MapDataElement, scale: float, x: int, y: int):
-        self.current = data
-        self.posx = x
-        self.posy = y
+       
+    def paint(data: MapDataElement, selected: bool, scale: float, x: int, y: int, p: QPainter):
+        posx = x
+        posy = y
         w, h = int(data.src.width() * scale), int(data.src.height() * scale)
-        self.x = int(x - (w - BS * scale) / 2)
-        self.y = int(y - (h - BS * scale) / 2)
-
-class XYDict:
-    _offset = 32768
-    _list = []
-
-    def less_zorder(lhs, rhs) -> bool:
-        msd = 1 if XYDict.less_msb(lhs[0] ^ rhs[0], lhs[1] ^ rhs[1]) else 0
-        return lhs[msd] < rhs[msd]
-
-    def less_msb(x: int, y: int) -> bool:
-        return x < y and x < (x ^ y)
-
-    def _bisect(self, xy):
-        i, j = 0, len(self._list)
-        while i < j:
-            h = (i + j) // 2
-            if XYDict.less_zorder(self._list[h][0], xy):
-                i = h + 1 
-            else:
-                j = h
-        return i
-    
-    @classmethod
-    def _xy(cls, x, y):
-        if x < -cls._offset or y < -cls._offset or x >= cls._offset or y >= cls._offset:
-            raise BaseException("wtf?")
-        return (x + cls._offset, y + cls._offset)
-
-    def __getitem__(self, k):
-        assert isinstance(k, tuple)
-        xy = XYDict._xy(k[0], k[1])
-        i = self._bisect(xy)
-        if i < len(self._list) and self._list[i][0] == xy:
-            return self._list[i][1]
-        return None
-
-    def __setitem__(self, k, d):
-        assert isinstance(k, tuple)
-        xy = XYDict._xy(k[0], k[1])
-        i = self._bisect(xy)
-        if i < len(self._list) and self._list[i][0] == xy:
-            self._list[i] = (xy, d)
-        else:
-            self._list.insert(i, (xy, d))
-
-    def __delitem__(self, k):
-        assert isinstance(k, tuple)
-        xy = XYDict._xy(k[0], k[1])
-        i = self._bisect(xy)
-        if i < len(self._list) and self._list[i][0] == xy:
-            self._list = self._list[:i] + self._list[i+1:]
-
-    class _Iterator:
-        def __init__(self, d) -> None:
-            self._index = 0
-            self._data = d
-
-        def __next__(self):
-            if self._index >= len(self._data):
-                raise StopIteration
-            self._index = self._index + 1
-            xy = self._data[self._index - 1][0]
-            return (xy[0] - XYDict._offset, xy[1] - XYDict._offset)
-
-    def __iter__(self):
-        return XYDict._Iterator(self._list)
-
-    def searchindex(self, x, y):
-        xy = XYDict._xy(x, y)
-        return self._bisect(xy)
-
-if __name__ == "__main__":
-    d = XYDict()
-    dr = {}
-    for i in range(int(1e4)):
-        x = random.randint(0, 30000)
-        y = random.randint(0, 30000)
-        dd = "{} {}".format(x, y)
-        dr[(x,y)] = dd
-        d[(x, y)] = dd
-    
-    for i in range(int(1e3)):
-        k, v = dr.popitem()
-        del d[k]
-
-    for k in dr:
-        v = dr[k]
-        v2 = d[k]
-        if v != v2:
-            raise ValueError
-
-    for k in d:
-        v = dr[k]
-        v2 = d[k]
-        if v != v2:
-            print(v, v2)
-            raise ValueError
+        x = int(x - (w - BS * scale) / 2)
+        y = int(y - (h - BS * scale) / 2)
+        w, h = data.src.width() * scale, data.src.height() * scale
+        MapDataRenderer._paint(data, x, y, w, h, p)
+        if not data.text:
+            return
+        font = MapDataRenderer.FontsManager.get(data.textFont, int(data.textSize * scale))
+        p.save()
+        p.setFont(font)
+        selected and p.setPen(MapDataRenderer._selectedTextPen)
+        r, option = data.textbbox(scale, posx, posy)
+        p.drawText(QRectF(r.x(), r.y(), r.width(), r.height()), data.text, option=QtGui.QTextOption(option))
+        p.restore()

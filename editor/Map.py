@@ -12,8 +12,8 @@ from PyQt5.QtWidgets import (QApplication, QComboBox, QInputDialog, QLineEdit,
                              QMainWindow, QMessageBox, QWidget, qApp)
 
 from Common import BS, FLAGS, TR
-from Controller import DragController, HoverController, Ruler, Selection
-from MapData import MapCell, MapData, MapDataElement
+from Controller import Dragger, Hover, Ruler, Selector
+from MapData import MapDataRenderer, MapData, MapDataElement
 from Parser import filterBS, parseBS
 from Svg import SvgSource
 
@@ -45,7 +45,7 @@ class Map(QWidget):
                 </svg>""".format(i).encode('utf-8')))
             sources[i].overrideSize(32, 32)
             
-        for i in range(0, 0):
+        for i in range(0, 1000):
             l = int(random.random() * 15 + 10)
             d = random.random() * math.pi * 2
             x, y = int(l * math.cos(d)), int(l * math.sin(d))
@@ -56,13 +56,11 @@ class Map(QWidget):
                 el.text = "lazy\nfox jumps"
             self.data._put(x, y, el)
 
-        self.selector = Selection(self)
-        self.dragger = DragController(self)
-        self.hover = HoverController(self)
+        self.selector = Selector(self)
+        self.dragger = Dragger(self)
+        self.hover = Hover(self)
         self.ruler = Ruler(self)
-        self.svgBoxes = []
-        self.svgBoxesRecycle = []
-        self.currentData: MapDataElement = None
+        self.boxRows = self.boxCols = 0
         self.viewOrigin = [0, 0]
         self.pan(0, 0) # fill svgBoxes
         self.setMouseTracking(True)
@@ -72,20 +70,32 @@ class Map(QWidget):
         self.showRuler = True
         self.setFocusPolicy(QtCore.Qt.FocusPolicy.ClickFocus)
         
-    def cacheSvgBoxLocked(self, cell):
-        self.svgBoxesRecycle.append(cell)
-
     def resizeEvent(self, a0: QtGui.QResizeEvent) -> None:
         self.pan(0, 0)
         return super().resizeEvent(a0)
+
+    def _getVirtualCell(self, x, y):
+        bs = self._blocksize()
+        return self.data.get(x - int(self.viewOrigin[0] / bs) - 1, y - int(self.viewOrigin[1] / bs) - 1)
     
     def paintEvent(self, a0: QtGui.QPaintEvent) -> None:
         p = QtGui.QPainter(self)
         p.setRenderHint(QtGui.QPainter.RenderHint.HighQualityAntialiasing)
         p.fillRect(0, 0, self.width(), self.height(), Map.Background)
-        for row in self.svgBoxes:
-            for cell in row:
-                cell and cell.paint(p)
+
+        bs = self._blocksize()
+        sx, sy = self.deltaxy()
+
+        if self.boxRows * self.boxCols > len(self.data.data):
+            for v in self.data.data.values():
+                MapDataRenderer.paint(v, v in self.selector, self.scale, v.x * int(bs) + self.viewOrigin[0], v.y * int(bs) + self.viewOrigin[1], p)
+        else:
+            for y in range(self.boxRows):
+                for x in range(self.boxCols):
+                    tmp = self._getVirtualCell(x, y)
+                    if tmp and tmp.valid():
+                        MapDataRenderer.paint(tmp, tmp in self.selector, self.scale, x * int(bs) + sx - bs, y * int(bs) + sy - bs, p)
+
         self.selector.paint(p)
         self.dragger.paint(p)
         self.hover.paint(p)
@@ -120,43 +130,9 @@ class Map(QWidget):
         offsetX = self.viewOrigin[0] = self.viewOrigin[0] + dx
         offsetY = self.viewOrigin[1] = self.viewOrigin[1] + dy
 
-        rows = int(self.height() / blockSize) + 3
-        cols = int(self.width() / blockSize) + 3
-        for r in self.svgBoxes:
-            while len(r) < cols:
-                r.append(None)
-        while len(self.svgBoxes) < rows:
-            self.svgBoxes.append([None for x in range(cols)])
-            
-        for i in range(rows, len(self.svgBoxes)):
-            for cell in self.svgBoxes[i]:
-                cell and self.cacheSvgBoxLocked(cell)
-        self.svgBoxes = self.svgBoxes[:rows]
+        self.boxRows = int(self.height() / blockSize) + 3
+        self.boxCols = int(self.width() / blockSize) + 3
 
-        for r in self.svgBoxes:
-            for i in range(cols, len(r)):
-                r[i] and self.cacheSvgBoxLocked(r[i])
-            r[cols:] = []
-            
-        sx, sy = self.deltaxy()
-
-        for y in range(len(self.svgBoxes)):
-            for x in range(len(self.svgBoxes[y])):
-                tmp = self.data.get(x - int(offsetX / blockSize) - 1, y - int(offsetY / blockSize) - 1)
-                cell: MapCell = self.svgBoxes[y][x]
-                if (tmp == None or not tmp.valid()) and cell:
-                    self.svgBoxes[y][x] = None
-                    self.cacheSvgBoxLocked(cell)
-
-        for y in range(len(self.svgBoxes)):
-            for x in range(len(self.svgBoxes[y])):
-                tmp = self.data.get(x - int(offsetX / blockSize) - 1, y - int(offsetY / blockSize) - 1)
-                cell: MapCell = self.svgBoxes[y][x]
-                if tmp and tmp.valid():
-                    cell = cell or self._newSvg()
-                    self.svgBoxes[y][x] = cell
-                    cell.loadResizeMove(tmp, self.scale, x * int(blockSize) + sx - blockSize, y * int(blockSize) + sy - blockSize)
-                
         self.findMainWin().barPosition.setText('x:{}({}) y:{}({})'.format(offsetX, int(offsetX / blockSize), offsetY, int(offsetY / blockSize)))
         self.findMainWin().barZoom.setText('{}%'.format(int(self.scale * 100)))
         
@@ -168,19 +144,14 @@ class Map(QWidget):
         bs = self._blocksize()
         sx, sy = self.deltaxy()
         rr = math.floor
-        ix = math.ceil((c.x() - sx) / bs) # xy of cell
-        iy = math.ceil((c.y() - sy) / bs)
         pt = QtCore.QPoint(int((c.x() - sx) / bs) * bs + sx, int((c.y() - sy) / bs) * bs + sy)
         x_ = (c.x() - self.viewOrigin[0]) / bs # xy of data
         y_ = (c.y() - self.viewOrigin[1]) / bs
         x, y = rr(x_), rr(y_)
         if x_ == x or y_ == y: # special case: cursor on edge, no cell found
-            return None, None, pt
+            return None, pt
         d = self.data.get(x, y) or MapDataElement(x = x, y = y)
-        if iy >= len(self.svgBoxes) or ix >= len(self.svgBoxes[iy]):
-            return None, None, pt
-        cell = self.svgBoxes[iy][ix]
-        return d, cell, pt
+        return d, pt
     
     def findMainWin(self):
         p = self.parent()
@@ -280,23 +251,21 @@ class Map(QWidget):
         try:
             l = json.loads(text)
             if not isinstance(l, list):
-                raise JSONDecodeError('', '', 0)
-            for s in l:
-                d: MapDataElement = MapDataElement.fromdict(s)
-                if d and d.src and d.src.svgId:
-                    c.append(d)
-                else:
-                    bad = True
+                c = filterBS(parseBS(text))
+            else:
+                for s in l:
+                    d = MapDataElement.fromdict(s)
+                    if d and d.src and d.src.svgId:
+                        c.append(d)
+                    else:
+                        bad = True
         except JSONDecodeError:
-            rows = parseBS(text)
-            c = filterBS(rows)
+            c = filterBS(parseBS(text))
 
         if bad or len(c) == 0:
             QMessageBox(QMessageBox.Icon.Warning, TR("Paste"),
                         c and TR("__paste_filter_invalid_blocks__").format(len(c)) or TR("__paste_no_valid_blocks__")).exec_()
-
-        if len(c):
-            self.ghostHold(c)
+        len(c) and self.ghostHold(c)
 
     def actUndoRedo(self, redo=False):
         if redo:
@@ -343,27 +312,16 @@ class Map(QWidget):
         self.viewOrigin = [x, y]
         self.pan(0, 0)
     
-    def _toggleSvgBoxesMoving(self, v):
-        for row in self.svgBoxes:
-            for c in row:
-                if c:
-                    c.moving = v
-        for c in self.svgBoxesRecycle:
-            c.moving = v
-
     def mousePressEvent(self, a0: QtGui.QMouseEvent) -> None:
         if FLAGS["DEBUG_crash"]:
             print(1 // 0)
         if self.showRuler and self.ruler.mousePress(a0):
             self.repaint()
             return super().mousePressEvent(a0)
-        d, _, pt = self.findCellUnder(a0)
-        self.currentData = d
+        d, pt = self.findCellUnder(a0)
         if a0.buttons() & QtCore.Qt.MouseButton.MidButton: # pan start
             self.pressPos = a0.pos()
             QApplication.setOverrideCursor(QtCore.Qt.CursorShape.DragMoveCursor)
-            if len(self.svgBoxes) * len(self.svgBoxes[0]) > FLAGS['perf1']:
-                self._toggleSvgBoxesMoving(True)
         elif len(self.hover.labels) > 0: # ghost hold, place them
             if a0.buttons() & QtCore.Qt.MouseButton.RightButton:
                 self.hover.clear()
@@ -399,20 +357,21 @@ class Map(QWidget):
                     self.selector.clear()
                     # let's take the slow way, find something visually selectable and select it for user
                     bs = self._blocksize()
-                    d, _, _ = self.findCellUnder(None, QtCore.QPoint(a0.x() - bs, a0.y()))
+                    d, _ = self.findCellUnder(None, QtCore.QPoint(a0.x() - bs, a0.y()))
                     if d and d.src and d.calcActualWidthX(bs, bs) > bs:
                         # double width block consists of 2 std blocks (a, b), user clicked "b", we select "a"
                         self.selector.addSelection(d)
                     else:
                         # block with text, user clicked "text", we select the block
-                        for row in self.svgBoxes:
-                            for cell in row:
-                                if cell and cell.current.text:
-                                    cell: MapCell
-                                    r = cell.current.textbbox(self.scale, cell.posx, cell.posy, measure=True)
+                        sx, sy = self.deltaxy()
+                        for y in range(self.boxRows):
+                            for x in range(self.boxCols):
+                                cell = self._getVirtualCell(x, y)
+                                if cell and cell.valid() and cell.text:
+                                    posx, posy = x * bs + sx - bs, y * bs + sy - bs
+                                    r = cell.textbbox(self.scale, posx, posy, measure=True)
                                     if r.contains(a0.pos()):
-                                        self.selector.addSelection(cell.current)
-                                        self.currentData = cell.current
+                                        self.selector.addSelection(cell)
             self.repaint()
         return super().mousePressEvent(a0)
     
@@ -426,12 +385,13 @@ class Map(QWidget):
         self.pressPosPath.append((x, y))
 
     def mouseMoveEvent(self, a0: QtGui.QMouseEvent) -> None:
-        d, cell, pt = self.findCellUnder(a0)
+        d, pt = self.findCellUnder(a0)
+        changed = False
         if d: # update ruler
             xy = (d.x, d.y)
-            changed = self.ruler.currentXY != xy
+            changed = self.ruler.currentXY != xy and self.showRuler
             self.ruler.currentXY = xy
-            changed and self.showRuler and self.repaint()
+
         if a0.buttons() & QtCore.Qt.MouseButton.MidButton: # pan
             diff: QtCore.QPoint = a0.pos() - self.pressPos
             self.pressPos = a0.pos()
@@ -450,21 +410,27 @@ class Map(QWidget):
                     elif a0.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier: # un-select
                         self.selector.delSelection(d)
             self.repaint()
+        elif changed:
+            self.repaint()
         return super().mouseMoveEvent(a0)
     
     def mouseReleaseEvent(self, a0: QtGui.QMouseEvent) -> None:
         self.pressPos = None
         
         if self.pressPosPath: # circle select, calc how many blocks have been circled
+            sx, sy = self.deltaxy()
+            bs = self._blocksize()
             poly = QtGui.QPolygon()
             for x, y in self.pressPosPath:
                 poly.append(QtCore.QPoint(x, y))
-            for row in self.svgBoxes:
-                for cell in row:
-                    if cell and cell.current:
-                        p = QtCore.QPoint(cell.posx + self._blocksize() // 2, cell.posy + self._blocksize() // 2)
+            for y in range(self.boxRows):
+                for x in range(self.boxCols):
+                    cell = self._getVirtualCell(x, y)
+                    if cell and cell.valid():
+                        posx, posy = x * bs + sx - bs, y * bs + sy - bs
+                        p = QtCore.QPoint(posx + bs // 2, posy + bs // 2)
                         if poly.containsPoint(p, QtCore.Qt.FillRule.OddEvenFill):
-                            self.selector.addSelection(cell.current, propertyPanel=False)
+                            self.selector.addSelection(cell, propertyPanel=False)
             self.findMainWin().propertyPanel.update()
             self.pressPosPath.clear()
         
@@ -476,10 +442,8 @@ class Map(QWidget):
             if dx != 0 or dy != 0:
                 self.selector.moveEnd(dx, dy)
 
-        QApplication.restoreOverrideCursor()
-        self._toggleSvgBoxesMoving(False)
-
         self.pan(0, 0)
+        QApplication.restoreOverrideCursor()
         return super().mouseReleaseEvent(a0)
     
     def wheelEvent(self, a0: QtGui.QWheelEvent) -> None:
@@ -490,26 +454,7 @@ class Map(QWidget):
             c = self.hover.cats()
             if len(c) == 1:
                 v = a0.angleDelta().y() or a0.angleDelta().x()
-                if v > 0:
-                    el = self.hover.labels[-1].dup()
-                    el.cascades = []
-                    id = el.src.svgId
-                    if id.endswith("q.svg"):
-                        el.x = el.x + 1
-                    else:
-                        if re.search(r"c\d+(x\d+)?\.svg$", id):
-                            if '3' in id or '1' in id:
-                                el.x = el.x + 1
-                            else:
-                                el.x = el.x - 1
-                        elif ('3' in id and '%2B1' in id) or ('1' in id and '%2B3' in id):
-                            el.x = el.x - 1
-                        elif ('4' in id and '%2B2' in id) or ('2' in id and '%2B4' in id):
-                            el.x = el.x + 1
-                        el.y = el.y + 1
-                    self.hover.labels.append(el)
-                elif len(self.hover.labels) > 1:
-                    self.hover.labels = self.hover.labels[:-1]
+                self.hover.incr() if v > 0 else self.hover.decr()
                 self.repaint()
             return super().wheelEvent(a0)
             
@@ -525,7 +470,3 @@ class Map(QWidget):
         self.pan(0, 0)
         return super().wheelEvent(a0)
     
-    def _newSvg(self):
-        if self.svgBoxesRecycle:
-            return self.svgBoxesRecycle.pop()
-        return MapCell(self)

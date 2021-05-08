@@ -59,6 +59,7 @@ class SvgSource:
     Manager = {}
     Search: SvgSearch = None
     Parent: QWidget
+    Cache = {}
     
     def get(id):
         if id in SvgSource.Manager:
@@ -129,29 +130,36 @@ class SvgSource:
             with open(self.svgData, 'rb') as f:
                 return f.read().decode('utf-8')
         except Exception as e:
-            QtCore.qDebug("SvgSource.source: {}".format(e))
+            QtCore.qDebug("SvgSource.source: {}".format(e).encode('utf-8'))
 
     def paint(self, x: int, y: int, w: int, h: int, p: QPainter, ghost=False, xOffsetPercent=0):
-        if not self.svgValid:
-            p.drawRect(x, y, w, h)
-            p.save()
-            p.setPen(QPen(QColor(255, 0, 0)))
-            p.drawText(QtCore.QRect(x + 2, y + 2, w - 4, h - 4), QtCore.Qt.AlignmentFlag.AlignCenter | QtCore.Qt.TextFlag.TextWrapAnywhere, self.cleanSvgId())
-            p.drawLine(x, y, x + w, y + h)
-            p.drawLine(x + w, y, x, y + h)
-            p.restore()
-            return
-        # print(xOffsetPercent, xOffsetPercent % 1)
         xOffsetPercent = xOffsetPercent % 1
         x = x + int(xOffsetPercent * w)
         w = int(h * self._ratio)
-        if isinstance(self._renderer, QPixmap):
-            p.drawPixmap(x, y, w, h, self._renderer)
+
+        cached = SvgSource.Cache.get(self.svgId)
+        if cached and cached[0] == w and cached[1] == h:
+            pix = cached[2]
         else:
-            self._renderer.setFixedSize(w, h)
-            p.translate(x, y)
-            self._renderer.render(p, flags=QWidget.RenderFlag.DrawChildren)
-            p.translate(-x, -y)
+            pix = QPixmap(w, h)
+            pix.fill(QColor(0, 0, 0, 0))        
+            canvas = QPainter(pix)
+            if not self.svgValid:
+                canvas.drawRect(0, 0, w, h)
+                canvas.setPen(QPen(QColor(255, 0, 0)))
+                canvas.drawText(QtCore.QRect(2, 2, w - 4, h - 4), QtCore.Qt.AlignmentFlag.AlignCenter | QtCore.Qt.TextFlag.TextWrapAnywhere, self.cleanSvgId())
+                canvas.drawLine(0, 0, w, h)
+                canvas.drawLine(w, 0, 0, h)
+            else:
+                if isinstance(self._renderer, QPixmap):
+                    canvas.drawPixmap(0, 0, w, h, self._renderer)
+                else:
+                    self._renderer.setFixedSize(w, h)
+                    self._renderer.render(canvas, flags=QWidget.RenderFlag.DrawChildren)
+            canvas.end()
+            SvgSource.Cache[self.svgId] = (w, h, pix)
+
+        p.drawPixmap(x, y, pix)
         if ghost:
             p.fillRect(x, y, w, h, QColor(255, 255, 255, 180))
         

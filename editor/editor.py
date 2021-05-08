@@ -28,12 +28,10 @@ AP.add_argument('-c', '--convert', help="output PNG/SVG")
 AP.add_argument('--png-scale', help="output PNG scale", type=int, default=1)
 AP.add_argument('--show-keys', help="show modifier keys", action="store_true")
 AP.add_argument('--hide-ruler', help="hide UI ruler", action="store_true")
-AP.add_argument('--simple-pan-limit', help="performance tuning", type=int, default=2500)
 AP.add_argument('--debug-crash', help="DEBUG ONLY", action="store_true")
 args = AP.parse_args()
 FLAGS['show_keys'] = args.show_keys
 FLAGS['hide_ruler'] = args.hide_ruler
-FLAGS['perf1'] = args.simple_pan_limit
 FLAGS['DEBUG_crash'] = args.debug_crash
 logfile = open('logs.txt', 'ab+')
 

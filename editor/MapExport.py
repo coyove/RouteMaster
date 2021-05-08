@@ -1,9 +1,8 @@
 from os import curdir
 
 from PyQt5.QtGui import QImage, QPainter
-from PyQt5.QtWidgets import QMessageBox
 
-from MapData import MapCell, MapData
+from MapData import MapDataRenderer, MapData
 
 
 def exportMapDataPng(parent, fn: str, data: MapData):
@@ -15,13 +14,11 @@ def exportMapDataPng(parent, fn: str, data: MapData):
 
     img = QImage(bs * bounding.width(), bs * bounding.height(), QImage.Format.Format_ARGB32)
     p = QPainter(img)
-    cell = MapCell(parent.mapview)
     for x, y in data.data:
         d = data.data[(x, y)]
         x = x - x0
         y = y - y0
-        cell.loadResizeMove(d, parent.mapview.scale, x * bs, y * bs)
-        cell.paint(p)
+        MapDataRenderer.paint(d, False, parent.mapview.scale, x * bs, y * bs, p)
     p.end()
     img.save(fn)
 
