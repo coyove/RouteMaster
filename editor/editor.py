@@ -171,7 +171,7 @@ class Window(QMainWindow):
         self._addMenu(TR('&File'), '-')
         self._addMenu(TR('&File'), TR('&File Properties...'), 'F3', lambda x: FileProperty(self, self.fileMeta).exec_())
         self._addMenu(TR('&File'), '-')
-        self._addMenu(TR('&File'), TR('&Load Icons Package...'), '', lambda x: load_package(force=True))
+        self._addMenu(TR('&File'), TR('&Open Block Package...'), '', lambda x: load_package(force=True))
         self._addMenu(TR('&File'), '-')
         self._addMenu(TR('&File'), TR('&Quit'), '', lambda x: self._askSave(thenQuit=True))
 
@@ -430,5 +430,5 @@ def excepthook(exc_type, exc_value, exc_tb):
     app.quit()
 sys.excepthook = excepthook
 
-load_package(ICON_PACKAGE)
+# load_package(ICON_PACKAGE)
 app.exec_()
