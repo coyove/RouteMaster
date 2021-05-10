@@ -81,6 +81,9 @@ def filterBS(rows):
             if not d:
                 x = x + 1
                 continue
+            if isinstance(d, str) and not (d[0].isascii() and d[0].isalpha()):
+                x = x + 1
+                continue
             el = MapDataElement.createWithXY(x, y, d)
             if el:
                 c.append(el)

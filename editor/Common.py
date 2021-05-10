@@ -412,7 +412,7 @@ BSicon_uLKRWgl.svg
 BSicon_uLSTR2%2B4.svg
 """.split('\n')))
 
-from i18n import *
+from i18n import en, zh_CN
 
 LANG = QLocale.system().name()
 

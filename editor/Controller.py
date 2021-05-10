@@ -207,6 +207,7 @@ class Dragger:
             return
         if self.dragtonorm == self.startnorm:
             return
+        return
         Dragger._paint(self.startx, self.starty, self.dragtox, self.dragtoy, p)
         
     def _paint(startx, starty, dragtox, dragtoy, p: QPainter):

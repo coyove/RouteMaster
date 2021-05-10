@@ -16,7 +16,7 @@ dict = {
     "E&xport SVG...": "导出为SVG(&X)...",
     "Export": "导出",
     "&File Properties...": "属性(&P)...",
-    "&Load Icons Package...": "加载图标包(&L)...",
+    '&Open Data Folder': '打开数据文件夹(&D)',
     "&Undo": "撤销(&U)",
     "&Redo": "重做(&R)",
     "&Cut": "剪切(&X)",
