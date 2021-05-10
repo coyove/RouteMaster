@@ -63,6 +63,8 @@ dict = {
     'Overlay: Start X Percentage': "堆叠: 起始偏移量",
     "Add Line": "添加辅助线",
     "Remove Line": "删除辅助线",
+    "Block Name:": "块名：",
+    "&Download SVG Blocks": "下载SVG源文件(&V)",
 
     "[Untitled]": "[未命名]",
 
@@ -73,5 +75,7 @@ dict = {
     "__paste_no_valid_blocks__": "粘贴：数据无效",
     "__paste_filter_invalid_blocks__": "粘贴：已过滤无效数据 (剩余 {})",
     "__about__": "一个简单的路线图设计工具",
+    "__download_icons__": "从wikimedia下载缺失图标",
+    "__block_dir__": "未发现数据，请安装7-zip并将blocks.7z解压至{}",
 }
 

@@ -9,7 +9,7 @@ from os import name
 from setuptools import setup
 
 APP = ['editor.py']
-DATA_FILES = ['logo.ico']
+DATA_FILES = ['logo.ico', 'qtbase_zh_CN.qm', 'blocks.7z']
 OPTIONS = {
     'packages': ['i18n'],
 }

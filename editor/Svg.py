@@ -1,4 +1,6 @@
+from SvgValidator import convertpng
 import json
+import re
 import os
 from urllib.parse import quote, unquote
 
@@ -6,7 +8,7 @@ from PyQt5 import QtCore, QtGui, QtSvg
 from PyQt5.QtGui import QBrush, QColor, QPainter, QPen, QPixmap
 from PyQt5.QtWidgets import QMainWindow, QWidget
 
-from Common import BS, PNG_POLYFILLS, TR
+from Common import BS, FLAGS, TR
 
 
 def _quote(s: str):
@@ -32,24 +34,27 @@ class SvgSearch:
         p = "bsicon_" + _quote(s).lower() + ".svg"
         if p in self.files:
             return self.files[p], self.fullpath(self.files[p])
-        QtCore.qDebug(("guess '" + s + u"' failed").encode('utf-8'))
+        if re.search(r"^[a-zA-Z1-4\~\-\@\+\.\(\)]+$", s) and not FLAGS["disable_download"]:
+            SvgSource.Parent.loader.addTask(s)
+        elif s[0].isascii() and s[0].isalpha():
+            QtCore.qDebug(("guess '" + s + u"' failed").encode('utf-8'))
         return "", ""
                 
     def fullpath(self, id: str):
         return self.path + "/" + id
         
     def search(self, q: str):
-        q = q.strip().lower()
+        q = q.strip()
+        qq = _quote(q).lower()
         c = []
 
-        test = "bsicon_" + _quote(q) + ".svg"
+        test = "bsicon_" + qq + ".svg"
         if test in self.files:
             c.append((self.files[test], 1e8))
             
-        uq = _quote(q).lower()
         for f in self.files:
             f: str = f
-            if f.count(uq) > 0:
+            if f.count(qq) > 0:
                 c.append((self.files[f], 1e3 * (1000 - len(f))))
             
         c = sorted(c, key=lambda x: (x[1], x[0]), reverse=True)
@@ -66,15 +71,13 @@ class SvgSource:
             return SvgSource.Manager[id]
         fn, p = SvgSource.Search.guess(id)
         if fn:
-            s = SvgSource(fn, p, BS, BS)
-            return s
+            return SvgSource(fn, p, BS, BS)
         return None
     
     def getcreate(id, fn, w, h):
         if id in SvgSource.Manager:
             return SvgSource.Manager[id]
-        s = SvgSource(id, fn, w, h)
-        return s
+        return SvgSource(id, fn, w, h)
     
     def tryRotate(id: str, q=False, c1234=False):
         def check(fn):
@@ -88,42 +91,39 @@ class SvgSource:
             return check(id + "q.svg")
         return
     
-    def __init__(self, id, svgData: bytes, w = 0, h = 0) -> None:
+    def __init__(self, id: str, svgData, w, h) -> None:
         self.svgData = svgData
         self.svgId = id
-        self._ratio = 1
         self.svgValid = True
-        if id in PNG_POLYFILLS:
-            self._renderer = QPixmap(svgData.removesuffix(".svg") + ".png")
-            # print(self._renderer.height(), svgData)
-            if not self._renderer.height() or not self._renderer.width():
-                QtCore.qDebug("{}/{} not valid".format(id, svgData).encode("utf-8"))
-                self.svgValid = False
-            else:
-                self._ratio = self._renderer.width() / self._renderer.height()
+        self._ratio = 1
+        png = svgData.removesuffix(".svg") + ".png" if isinstance(svgData, str) else ""
+        if os.path.exists(png):
+            self._renderer = QPixmap(png)
+            self._ratio = self._renderer.width() / self._renderer.height()
         else:
-            self._renderer = QtSvg.QSvgWidget(SvgSource.Parent) # SvgRenderer can't render, don't know why
+            self._renderer = QtSvg.QSvgRenderer()
             self._renderer.load(svgData)
-            self._renderer.setVisible(False)
-            self.svgValid = self._renderer.renderer().isValid()
+            self.svgValid = self._renderer.isValid()
             if self.svgValid:
-                self._ratio = self._renderer.sizeHint().width() / self._renderer.sizeHint().height()
+                self._ratio = self._renderer.viewBox().width() / self._renderer.viewBox().height()
             else:
-                self._ratio = 1
+                convertpng(svgData)
+                if os.path.exists(png):
+                    self._renderer = QPixmap(png)
+                    self._ratio = self._renderer.width() / self._renderer.height()
+                else:
+                    self._ratio = 1
         self._w, self._h = w, h
         SvgSource.Manager[self.svgId] = self
 
     def cleanSvgId(self):
         return unquote(self.svgId.replace('bsicon_', '').replace('.svg', '').replace('BSicon_', ''))
         
-    def overrideSize(self, w, h):
-        self._w, self._h = w, h
-        
     def width(self):
-        return self._w or self._renderer.sizeHint().width() 
+        return self._w 
     
     def height(self):
-        return self._h or self._renderer.sizeHint().height()
+        return self._h
 
     def source(self):
         try:
@@ -154,8 +154,7 @@ class SvgSource:
                 if isinstance(self._renderer, QPixmap):
                     canvas.drawPixmap(0, 0, w, h, self._renderer)
                 else:
-                    self._renderer.setFixedSize(w, h)
-                    self._renderer.render(canvas, flags=QWidget.RenderFlag.DrawChildren)
+                    self._renderer.render(canvas)
             canvas.end()
             SvgSource.Cache[self.svgId] = (w, h, pix)
 

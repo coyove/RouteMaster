@@ -30,31 +30,30 @@ class Map(QWidget):
     def BigFont():
         return QtGui.QFont(QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.SystemFont.FixedFont).family(), 16)
 
-    def __init__(self, parent, sources):
+    def __init__(self, parent):
         super().__init__(parent)
         
         self.data = MapData(self)
         self.scale = 2
 
-        sources = sources or []
-        for i in range(0, 10):
-            sources.append(SvgSource("id" + str(i), """
-                <svg height="48" width="48">
-                    <text x="8" y="24" fill="red">{}</text>
-                    <rect x="8" y="8" width="32" height="32" fill="transparent" stroke="#000"></rect>
-                </svg>""".format(i).encode('utf-8')))
-            sources[i].overrideSize(32, 32)
-            
-        for i in range(0, 1000):
-            l = int(random.random() * 15 + 10)
-            d = random.random() * math.pi * 2
-            x, y = int(l * math.cos(d)), int(l * math.sin(d))
-            el = MapDataElement(sources[random.randrange(0, len(sources))])
-            if random.random() > 0.9:
-                el.cascades.append(sources[random.randrange(0, len(sources))])
-            if random.random() > 0.8:
-                el.text = "lazy\nfox jumps"
-            self.data._put(x, y, el)
+        if FLAGS["DEBUG_fill"]:
+            sources = []
+            for i in range(0, 10):
+                sources.append(SvgSource("id" + str(i), """
+                    <svg height="48" width="48">
+                        <text x="8" y="24" fill="red">{}</text>
+                        <rect x="8" y="8" width="32" height="32" fill="transparent" stroke="#000"></rect>
+                    </svg>""".format(i).encode('utf-8'), BS, BS))
+            for i in range(0, 1000):
+                l = int(random.random() * 15 + 10)
+                d = random.random() * math.pi * 2
+                x, y = int(l * math.cos(d)), int(l * math.sin(d))
+                el = MapDataElement(sources[random.randrange(0, len(sources))])
+                if random.random() > 0.9:
+                    el.cascades.append(sources[random.randrange(0, len(sources))])
+                if random.random() > 0.8:
+                    el.text = "lazy\nfox jumps"
+                self.data._put(x, y, el)
 
         self.selector = Selector(self)
         self.dragger = Dragger(self)
@@ -207,12 +206,10 @@ class Map(QWidget):
             edit.setFocus()
             edit.selectAll()
             
-        if a0.key() == QtCore.Qt.Key.Key_Q or a0.key() == QtCore.Qt.Key.Key_1:
-            q = a0.key() == QtCore.Qt.Key.Key_Q 
-            c = a0.key() == QtCore.Qt.Key.Key_1
+        if a0.key() == QtCore.Qt.Key.Key_Q:
             for l in self.hover.labels:
                 l: MapDataElement
-                r = SvgSource.tryRotate(l.src.svgId, q=q, c1234=c)
+                r = SvgSource.tryRotate(l.src.svgId, q=True)
                 if r:
                     l.src = SvgSource.getcreate(r, SvgSource.Search.path + "/" + r, BS, BS)
 

@@ -1,19 +1,23 @@
-from Svg import SvgSource
 import os
-import time
-import zipfile
+from os.path import join
+import re
+from urllib import request
 
-from PyQt5 import QtCore
+from PyQt5 import QtCore, QtGui
 from PyQt5.QtWidgets import (QApplication, QFileDialog, QLabel, QMainWindow,
                              QProgressBar, QVBoxLayout, QWidget)
 
-from Common import APP_NAME, BLOCK_DIR
+from Common import APP_NAME, BLOCK_DIR, TR, WIN_WIDTH
+from Svg import SvgSearch, SvgSource, _quote
 
 
 class Loader(QMainWindow):
-    def __init__(self, path):
+    Single = None
+
+    def __init__(self):
         super().__init__(flags=QtCore.Qt.WindowType.WindowCloseButtonHint|QtCore.Qt.WindowType.WindowStaysOnTopHint)
         self.setWindowTitle(APP_NAME)
+        self.setMaximumWidth(WIN_WIDTH * 2)
         self.show()
 
         w = QWidget(self)
@@ -22,79 +26,66 @@ class Loader(QMainWindow):
 
         self.bar = QProgressBar(w)
         self.bar.show()
-        box.addWidget(QLabel("Loading blocks, you can close to skip and redo later"), 1)
+        self.bar.setRange(0, 0)
+
+        box.addWidget(QLabel(TR("__download_icons__")), 1)
+        self.progress = QLabel('0')
+        box.addWidget(self.progress)
         box.addWidget(self.bar, 1)
 
         self.setCentralWidget(w) 
+        self.setVisible(False)
+        self.tasks = set()
+        Loader.Single = self
 
-        self.closed = False
-        self.loading = LoaderTask(self, self.bar, path)
-        self.loading.start()
-        self.loading.taskFinished.connect(lambda: self.close())
+    def addTask(self, fn: str):
+        if fn in self.tasks:
+            return
+        self.tasks.add(fn)
+        loading = LoadTask(self, fn)
+        loading.start()
+        self.setVisible(True)
+        self.updateProgress()
+        self.bar.setMaximum(self.bar.maximum() + 1)
+        loading.taskFinished.connect(lambda: self.onComplete(fn))
 
-        # r = QApplication.desktop().screenGeometry()
-        # self.move((r.width() - self.width()) // 2, (r.height() - self.height()) // 2)
+    def updateProgress(self):
+        self.progress.setText('({}) -> {}'.format(len(self.tasks), '/'.join(self.tasks)))
 
-        self.installEventFilter(self)
+    def onComplete(self, fn: str) -> None:
+        self.tasks.remove(fn)
+        self.updateProgress()
+        self.bar.setValue(self.bar.value() + 1)
+        if len(self.tasks) == 0:
+            self.setVisible(False)
+            SvgSource.Search.reload()
 
-    def closeEvent(self, a0):
-        self.closed = True
-        return super().closeEvent(a0)
-
-    def eventFilter(self, a0, a1: QtCore.QEvent) -> bool:
-        if int(a1.type()) == 9731:
-            self.bar.setValue(a1.progress)
-        return super().eventFilter(a0, a1)
-
-class LoaderProgress(QtCore.QEvent):
-    def __init__(self, p):
-        super().__init__(QtCore.QEvent.Type(9731))
-        self.progress = p
-
-class LoaderTask(QtCore.QThread):
+class LoadTask(QtCore.QThread):
     taskFinished = QtCore.pyqtSignal()
 
-    def __init__(self, parent, bar, path):
+    def __init__(self, parent, name):
         super().__init__(parent=parent)
-        self.path = path
-        self.bar = bar
+        self.name = name
 
     def run(self):
-        zf = zipfile.ZipFile(self.path)
-        self.bar.setRange(0, sum((file.file_size for file in zf.infolist())))
-        extracted_size = 0
-        for file in zf.infolist():
-            if self.parent().closed:
-                break
-            extracted_size += file.file_size
-            fn = os.path.basename(file.filename)
-            if fn.endswith(".svg") or fn.endswith(".png") or fn.endswith(".json"):
-                r = zf.open(file) 
-                with open(os.path.join(BLOCK_DIR, fn), 'wb+') as w:
-                    while True:
-                        buf = r.read(4096)
-                        if not buf:
-                            break
-                        w.write(buf)
-            QtCore.QCoreApplication.postEvent(self.parent(), LoaderProgress(extracted_size))
-            # self.bar.setValue(extracted_size)
-        zf.close()
-        if not self.parent().closed:
-            f = open(BLOCK_DIR + "/finished", 'w+')
-            f.write(str(int(time.time())))
-            f.close()
-
+        download(self.name)
         self.taskFinished.emit()
-        SvgSource.Search.reload()
 
-def load_package(path=None, force=False):
-    if os.path.isfile(BLOCK_DIR + '/finished') and not force:
-        return
+def download(name):
+    fn = "BSicon_" + _quote(name) + ".svg"
+    try:
+        with request.urlopen("https://en.wikipedia.org/wiki/File:" + fn) as r:
+            body = r.read().decode('utf-8')
+            m = re.findall(r'<a[^>]+?"(//upload\.wikimedia.+?\.svg)">', body)
+            if m:
+                with request.urlopen("https:" + m[0]) as r:
+                    with open(os.path.join(BLOCK_DIR, fn), "wb+") as f:
+                        f.write(r.read())
+        QtCore.qDebug("download {} ok".format(name).encode('utf-8'))
+        return True
+    except Exception as e:
+        QtCore.qDebug("download {}: FAIL {}".format(name, e).encode('utf-8'))
+        return False
 
-    if not path:
-        path, _ = QFileDialog.getOpenFileName(filter="Zip File (*.zip)")
-        if not path:
-            return
-
-    w = Loader(path)
-    w.show()
+if __name__ == "__main__":
+    download("MFADEf")

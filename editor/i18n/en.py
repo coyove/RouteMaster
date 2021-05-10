@@ -6,4 +6,6 @@ dict = {
     "__paste_no_valid_blocks__": "No valid blocks to paste",
     "__paste_filter_invalid_blocks__": "Invalid blocks have been filtered ({} remain)",
     "__export_success__": 'Successfully exported to {}',
+    "__download_icons__": "Downloading missing blocks from wikimedia",
+    "__block_dir__": "No blocks available, please install 7-zip and unpack blocks.7z to {}",
 }

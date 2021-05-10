@@ -1,5 +1,6 @@
 from Common import BS
 from MapData import MapDataElement
+from PyQt5.QtCore import qDebug
 
 
 def parseBS(s: str):
@@ -47,28 +48,32 @@ def parseBS(s: str):
     return rows
 
 def parseBSOld(s: str):
-    rows = []
-    for l in s.split('\n'):
-        l = l.strip().strip("{}")
-        if not l or not l.startswith("BS"):
-            continue
-        if l.startswith("BS-map"):
-            continue
-        count = int(l[2])
-        row = l.split("|")[1:]
-        i = 0
-        while i < len(row):
-            if row[i].startswith("O") and i > 0:
-                x = row[i].split('=')[1]
-                row[i - 1] = row[i - 1] + [x] if isinstance(row[i-1], list) else [row[i-1], x]
-                row = row[:i] + row[i+1:]
-            else:
-                i = i + 1
-        if len(row) > count:
-            row[count - 1] = ' '.join(row[count:]).strip()
-            row = row[:count]
-        rows.append(row)
-    return rows
+    try:
+        rows = []
+        for l in s.split('\n'):
+            l = l.strip().strip("{}")
+            if not l or not l.startswith("BS"):
+                continue
+            if l.startswith("BS-map"):
+                continue
+            count = int(l[2])
+            row = l.split("|")[1:]
+            i = 0
+            while i < len(row):
+                if row[i].startswith("O") and i > 0:
+                    x = row[i].split('=')[1]
+                    row[i - 1] = row[i - 1] + [x] if isinstance(row[i-1], list) else [row[i-1], x]
+                    row = row[:i] + row[i+1:]
+                else:
+                    i = i + 1
+            if len(row) > count:
+                row[count - 1] = ' '.join(row[count:]).strip()
+                row = row[:count]
+            rows.append(row)
+        return rows
+    except Exception as e:
+        qDebug('parse {}'.format(e).encode('utf-8'))
+        return []
 
 def filterBS(rows):
     c = []
@@ -81,9 +86,9 @@ def filterBS(rows):
             if not d:
                 x = x + 1
                 continue
-            if isinstance(d, str) and not (d[0].isascii() and d[0].isalpha()):
-                x = x + 1
-                continue
+            # if isinstance(d, str) and not (d[0].isascii() and d[0].isalpha()):
+            #     x = x + 1
+            #     continue
             el = MapDataElement.createWithXY(x, y, d)
             if el:
                 c.append(el)

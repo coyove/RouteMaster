@@ -10,7 +10,7 @@ from PyQt5.QtWidgets import (QApplication, QComboBox, QDialog, QHBoxLayout, QLab
                              QTableWidgetItem, QTabWidget, QTextEdit,
                              QTreeView, QVBoxLayout, QWidget)
 
-from Common import APP_NAME, PNG_POLYFILLS, TR, WIN_WIDTH
+from Common import APP_NAME, TR, WIN_WIDTH, ispngployfill
 from MapData import MapData, MapDataElement
 from Svg import SvgBar, SvgSearch, SvgSource
 
@@ -297,14 +297,14 @@ class FileProperty(QDialog):
         for v in data.data.values():
             if not v.src.svgId.lower() in SvgSource.Search.files:
                 missings.add(v.src.svgId)
-            if v.src.svgId in PNG_POLYFILLS:
+            if ispngployfill(v.src.svgId):
                 polyfills.add(v.src.svgId)
             dedup.add(v.src.svgId)
             total = total + 1
             for s in v.cascades:
                 if not s.svgId.lower() in SvgSource.Search.files:
                     missings.add(s.svgId)
-                if s.svgId in PNG_POLYFILLS:
+                if ispngployfill(s.svgId):
                     polyfills.add(s.svgId)
                 dedup.add(s.svgId)
                 total = total + 1

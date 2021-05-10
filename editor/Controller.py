@@ -56,21 +56,24 @@ class Selector:
             self.parent.findMainWin().propertyPanel.update()
         return True
 
-    def addRowCol(self, data: MapData, add, x=sys.maxsize, y=sys.maxsize):
-        if not add:
+    def addRowCol(self, data: MapData, noclear, remove, x=sys.maxsize, y=sys.maxsize):
+        if not noclear:
             self.clear()
         for dx, dy in data.data:
             if dy == y or dx == x:
-                self.addSelection(data.data[(dx, dy)], False)
+                if remove:
+                    self.delSelection(data.data[(dx, dy)], False)
+                else:
+                    self.addSelection(data.data[(dx, dy)], False)
         self.parent.findMainWin().propertyPanel.update()
         
-    def delSelection(self, data: MapDataElement):
+    def delSelection(self, data: MapDataElement, propertyPanel=True):
         if not id(data) in self.dedup:
             return 
         x = self.dedup[id(data)]
         del self.dedup[id(data)]
         self.labels.remove(x)
-        self.parent.findMainWin().propertyPanel.update()
+        propertyPanel and self.parent.findMainWin().propertyPanel.update()
         
     def moveEnd(self, dx, dy):
         self.parent.data.begin()
@@ -245,12 +248,14 @@ class Ruler:
         d, _ = self.parent.findCellUnder(a0)
         if not d:
             return False
+        shift = a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier
+        ctrl = a0.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier
         if a0.buttons() & QtCore.Qt.MouseButton.LeftButton:
             if a0.x() < Ruler.Width: # quick row selection
-                self.parent.selector.addRowCol(self.parent.data, a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier, y=d.y)
+                self.parent.selector.addRowCol(self.parent.data, shift or ctrl, ctrl, y=d.y)
                 return True
             if a0.y() < Ruler.Width: # quick column selection
-                self.parent.selector.addRowCol(self.parent.data, a0.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier, x=d.x)
+                self.parent.selector.addRowCol(self.parent.data, shift or ctrl, ctrl, x=d.x)
                 return True
         if a0.buttons() & QtCore.Qt.MouseButton.RightButton:
             if not (a0.x() < Ruler.Width or a0.y() < Ruler.Width):

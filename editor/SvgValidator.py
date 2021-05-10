@@ -1,14 +1,17 @@
 import sys
-from Common import BLOCK_DIR
-from os import read
 
-from PyQt5 import QtGui
-from PyQt5 import QtCore, QtWidgets
+from PyQt5 import QtCore, QtGui, QtSvg, QtWidgets
+from PyQt5.QtGui import QColor, QImage, QPainter, qAlpha
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget
 
-from PyQt5 import QtSvg
-from PyQt5.QtGui import QColor, QImage, QPainter, qAlpha, qGreen, qRed
+from Common import BLOCK_DIR, InkscapePath
 
+
+def convertpng(svg):
+    if os.path.exists(InkscapePath()):
+        os.system(InkscapePath() + " --export-type png -h 128 '" + svg.replace("'", "\\'") + "'")
+    else:
+        QtCore.qDebug("SvgSource convert: inkscape not found")
 
 if __name__ == '__main__':
     import os

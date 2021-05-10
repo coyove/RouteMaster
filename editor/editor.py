@@ -1,3 +1,4 @@
+from SvgPackage import Loader, download
 import json
 import shutil
 from json.decoder import JSONDecodeError
@@ -8,31 +9,39 @@ import typing
 
 from PyQt5 import QtCore, QtGui
 from PyQt5.QtWidgets import (QAction, QApplication, QDialog, QFileDialog,
-                             QHBoxLayout, QLabel, QLayout, QLineEdit,
+                             QHBoxLayout, QInputDialog, QLabel, QLayout, QLineEdit,
                              QListWidget, QMainWindow, QMenu, QMessageBox,
                              QPushButton, QSplitter, QStatusBar, QTextEdit,
                              QVBoxLayout, QWidget)
 
-from Common import (AP, APP_NAME, APP_VERSION, BLOCK_DIR, FLAGS, ICON_PACKAGE,
-                    LANG, LOGS, NEW_LINE, START_TIME, TR, WIN_WIDTH, VDialog)
+from Common import (AP, APP_NAME, APP_VERSION, BLOCK_DIR, FLAGS, InkscapePath,
+                    LANG, LOGS, NEW_LINE, START_TIME, TR, WIN_WIDTH, VDialog, setLang)
 from Map import Map
 from MapData import MapData, MapDataElement, SvgSource
 from MapExport import exportMapDataPng, exportMapDataSvg
 from Property import FileProperty, Property
-from Svg import SvgBar, SvgSearch
-from SvgPackage import load_package
+from Svg import SvgBar, SvgSearch, _quote
 
-globalSvgSources: typing.List[SvgSource] = None
 AP.add_argument('file', nargs="?")
 AP.add_argument('-c', '--convert', help="output PNG/SVG")
 AP.add_argument('--png-scale', help="output PNG scale", type=int, default=1)
 AP.add_argument('--show-keys', help="show modifier keys", action="store_true")
 AP.add_argument('--hide-ruler', help="hide UI ruler", action="store_true")
+AP.add_argument('--background', help="canvas background color", type=str, default='#ffffff')
+AP.add_argument('--disable-download', help="no wikimedia downloads", action="store_true")
+AP.add_argument("--inkscape", type=str, default="")
+AP.add_argument('--lang', help="UI language", type=str, default='')
 AP.add_argument('--debug-crash', help="DEBUG ONLY", action="store_true")
+AP.add_argument('--debug-fill', help="DEBUG ONLY", action="store_true")
 args = AP.parse_args()
 FLAGS['show_keys'] = args.show_keys
 FLAGS['hide_ruler'] = args.hide_ruler
+FLAGS['disable_download'] = args.disable_download
+FLAGS['inkscape'] = args.inkscape
 FLAGS['DEBUG_crash'] = args.debug_crash
+FLAGS['DEBUG_fill'] = args.debug_fill
+Map.Background = QtGui.QColor(args.background)
+args.lang and setLang(args.lang)
 logfile = open('logs.txt', 'ab+')
 
 class Logger(QDialog):
@@ -97,9 +106,9 @@ class About(VDialog):
 
         box.addWidget(_link("https://commons.wikimedia.org/wiki/BSicon/Guide"))
         box.addWidget(_link("https://github.com/coyove/RouteMaster", "{} on Github".format(APP_NAME)))
+        box.addWidget(_link("https://github.com/wisaly/qtbase_zh"))
         box.addWidget(_link("mailto:coyove@hotmail.com", TR("Send Feedbacks")))
         box.addWidget(_link("https://github.com/coyove/RouteMaster/issues", TR("File Issues on Github")))
-        box.addWidget(_link("https://github.com/wisaly/qtbase_zh"))
 
         btn = QPushButton(TR('OK'), self)
         btn.clicked.connect(lambda: self.close())
@@ -114,6 +123,9 @@ class Window(QMainWindow):
         self.searcher = SvgSearch(BLOCK_DIR)
         SvgSource.Search = self.searcher
         SvgSource.Parent = self
+
+        self.loader = Loader()
+        # self.loader.addTask("MFADEf")
 
         self.setWindowTitle(APP_NAME)
         self.setGeometry(0, 0, 800, 500)
@@ -150,7 +162,7 @@ class Window(QMainWindow):
         splitter = QSplitter(QtCore.Qt.Orientation.Horizontal)
         splitter.addWidget(self.propertyPanel)
 
-        self.mapview = Map(main, globalSvgSources)
+        self.mapview = Map(main)
         self._updateCurrentFile('')
         splitter.addWidget(self.mapview)
 
@@ -172,6 +184,7 @@ class Window(QMainWindow):
         self._addMenu(TR('&File'), TR('&File Properties...'), 'F3', lambda x: FileProperty(self, self.fileMeta).exec_())
         self._addMenu(TR('&File'), '-')
         self._addMenu(TR('&File'), TR('&Open Data Folder'), '', lambda x: QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(BLOCK_DIR)))
+        self._addMenu(TR('&File'), TR('&Download SVG Blocks'), '', self.actDownloadBlocks)
         self._addMenu(TR('&File'), '-')
         self._addMenu(TR('&File'), TR('&Quit'), '', lambda x: self._askSave(thenQuit=True))
 
@@ -203,7 +216,8 @@ class Window(QMainWindow):
         self.showMaximized()
 
         self.fileMeta = {}
-        self.resetFileMeta = lambda: self.__dict__.setdefault("fileMeta", { "author": APP_NAME, "desc": "Created by " + APP_NAME })
+        import socket
+        self.resetFileMeta = lambda: self.__setattr__("fileMeta", { "author": socket.gethostname(), "desc": APP_NAME })
         self.resetFileMeta()
 
         self.load(args.file or '')
@@ -229,6 +243,12 @@ class Window(QMainWindow):
         if not results:
             return
         self.searchResults.update(results)
+
+    def actDownloadBlocks(self, v):
+        ss, _ = QInputDialog.getText(self, APP_NAME, TR('Block Name:'))
+        for s in ss.split():
+            s = s.strip()
+            s and self.loader.addTask(s)
         
     def ghostHoldSvgSource(self, s):
         self.mapview.ghostHold([MapDataElement(s)])
@@ -402,16 +422,18 @@ app.setWindowIcon(QtGui.QIcon("logo.ico"))
 
 if sys.platform == "win32":
     import ctypes
-    myappid = u'mycompany.myproduct.subproduct.version' # arbitrary string
+    myappid = u'coyove.route.master' # arbitrary string
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 
 trdir = QtCore.QLibraryInfo.location(QtCore.QLibraryInfo.LibraryLocation.TranslationsPath)
 QtCore.qDebug("translation dir: " + trdir)
 tr = QtCore.QTranslator()
 if not os.path.exists(os.path.join(trdir, "qtbase_zh_CN")):
-    shutil.copy2('i18n/qtbase_zh_CN.qm', os.path.join(trdir, "qtbase_zh_CN"))
+    shutil.copy2('qtbase_zh_CN.qm', os.path.join(trdir, "qtbase_zh_CN"))
 tr.load("qtbase_" + LANG, trdir)
 app.installTranslator(tr)
+
+QtCore.qDebug("inkscape: " + (InkscapePath() or "not found, it is needed when rendering complex blocks"))
 
 win = Window()
 def excepthook(exc_type, exc_value, exc_tb):
@@ -430,5 +452,7 @@ def excepthook(exc_type, exc_value, exc_tb):
     app.quit()
 sys.excepthook = excepthook
 
-# load_package(ICON_PACKAGE)
+if not os.path.exists(BLOCK_DIR) or len(SvgSource.Search.files) == 0:
+    QMessageBox(QMessageBox.Icon.Warning, APP_NAME, TR("__block_dir__").format(BLOCK_DIR)).exec_()
+
 app.exec_()
