@@ -265,11 +265,11 @@ class Map(QWidget):
         len(c) and self.ghostHold(c)
 
     def actUndoRedo(self, redo=False):
+        self.selector.clear()
         if redo:
             self.data.forward()
         else:
             self.data.rewind()
-        self.selector.clear()
         self.pan(0, 0)
         
     def actSelectByText(self):

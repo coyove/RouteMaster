@@ -76,6 +76,6 @@ dict = {
     "__paste_filter_invalid_blocks__": "粘贴：已过滤无效数据 (剩余 {})",
     "__about__": "一个简单的路线图设计工具",
     "__download_icons__": "从wikimedia下载缺失图标",
-    "__block_dir__": "未发现数据，请安装7-zip并将blocks.7z解压至{}",
+    "__block_dir__": "未发现数据，请安装 7-zip / p7zip 并将 blocks.7z 解压至{}",
 }
 
