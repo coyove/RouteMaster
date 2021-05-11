@@ -66,7 +66,7 @@ def InkscapePath():
     if FLAGS.get('inkscape'):
         return FLAGS['inkscape']
     if sys.platform == "win32":
-        return "C:/Program Files/Inkscape/Inkscape.exe"
+        return 'C:/Progra~1/Inkscape/bin/inkscape.exe'
     out = os.popen('which inkscape').read().strip()
     if 'not found' in out.lower():
         return ""

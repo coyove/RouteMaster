@@ -1,4 +1,5 @@
 import sys
+import os
 
 from PyQt5 import QtCore, QtGui, QtSvg, QtWidgets
 from PyQt5.QtGui import QColor, QImage, QPainter, qAlpha
@@ -9,7 +10,11 @@ from Common import BLOCK_DIR, InkscapePath
 
 def convertpng(svg):
     if os.path.exists(InkscapePath()):
-        os.system(InkscapePath() + " --export-type png -h 128 '" + svg.replace("'", "\\'") + "'")
+        if sys.platform == 'win32':
+            c = InkscapePath() + " --export-type png -h 128 \"" + svg + "\""
+        else:
+            c = InkscapePath() + " --export-type png -h 128 '" + svg.replace("'", "\\'") + "'"
+        os.system(c)
     else:
         QtCore.qDebug("SvgSource convert: inkscape not found")
 
