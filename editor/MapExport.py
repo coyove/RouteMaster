@@ -2,7 +2,7 @@ from os import curdir
 
 from PyQt5.QtGui import QImage, QPainter
 
-from MapData import MapDataRenderer, MapData
+from MapData import MapData, MapDataRenderer
 
 
 def exportMapDataPng(parent, fn: str, data: MapData):

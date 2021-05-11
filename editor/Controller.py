@@ -7,7 +7,7 @@ from PyQt5.QtGui import (QBrush, QClipboard, QColor, QMouseEvent, QPainter,
                          QPainterPath, QPen)
 from PyQt5.QtWidgets import QMenu
 
-from Common import TR
+from Common import BS, TR
 from MapData import MapDataRenderer, MapData, MapDataElement
 
 
@@ -235,7 +235,8 @@ class Ruler:
     Background = QColor(255, 255, 255)
     Cursor = QColor(222, 237, 254)
     Corner = QBrush(QColor(0, 0, 0), QtCore.Qt.BrushStyle.BDiagPattern)
-    HVPen = QPen(QColor(190, 190, 190), 1, QtCore.Qt.PenStyle.DashLine)
+    HVColor = QColor(0xed, 0x7c, 0x93)
+    HVPen = QPen(HVColor, 1, QtCore.Qt.PenStyle.DashLine)
     BorderPen = QPen(QColor(120, 120, 120))
 
     def __init__(self, parent) -> None:
@@ -279,16 +280,29 @@ class Ruler:
             return True
         return False
 
-    def _drawLine(self, x, y, h, p: QPainter):
+    def _drawLine(self, x, y, h, bs, p: QPainter):
         p.save()
         p.setPen(Ruler.HVPen)
-        bs = self.parent._blocksize()
         if h:
             p.drawLine(x, y + bs // 2, x + self.parent.width(), y + bs // 2)
-            p.fillRect(0, y, Ruler.Width // 4, bs, QColor(0xed, 0x7c, 0x93))
+            p.fillRect(0, y, Ruler.Width // 4, bs, Ruler.HVColor)
         else:
             p.drawLine(x + bs // 2, y, x + bs // 2, y + self.parent.height())
-            p.fillRect(x, 0, bs, Ruler.Width // 4, QColor(0xed, 0x7c, 0x93))
+            p.fillRect(x, 0, bs, Ruler.Width // 4, Ruler.HVColor)
+        p.restore()
+
+    def _drawGrid(self, x, y, bs, p: QPainter):
+        if bs < BS // 2:
+            return
+        w = max(bs // 32, 1)
+        p.save()
+        a = int( 255 / (BS * 4 - BS // 2) * (bs - BS // 2) ) + 20
+        p.setPen(QPen(QColor(0xFF, 0x8C, 0, a if a < 255 else 255), w // 2 + 1))
+        for xx in range(x, x + self.parent.width(), bs):
+            if xx - w < Ruler.Width:
+                continue
+            p.drawLine(xx - w, y, xx + w, y)
+            p.drawLine(xx, y + w, xx, y - w)
         p.restore()
 
     def paint(self, p: QPainter):
@@ -311,9 +325,10 @@ class Ruler:
 
         p.fillRect(0, 0, width, self.height(), Ruler.Background)
         for y in range(0, self.height() + blockSize, blockSize):
+            old._drawGrid(sx, y + sy, blockSize, p)
             iy = int((y - yy) / blockSize)
             iy == old.currentXY[1] and p.fillRect(0, y + sy, width, blockSize, Ruler.Cursor)
-            iy in old.hlines and old._drawLine(width, y + sy, True, p)
+            iy in old.hlines and old._drawLine(width, y + sy, True, blockSize, p)
 
             if (y - yy) % smallstep != 0:
                 p.drawLine(0, y + sy, width / 4, y + sy)
@@ -328,12 +343,13 @@ class Ruler:
 
         p.fillRect(0, 0, self.width(), width, Ruler.Background)
         for x in range(0, self.width() + blockSize, blockSize):
+            # old._drawGrid(sx + x, sy, False, blockSize, p)
             # x + sx: on-canvas x coord
             if x + sx < width:
                 continue
             ix = int((x - xx) / blockSize)
             ix == old.currentXY[0] and p.fillRect(x + sx, 0, blockSize, width, Ruler.Cursor)
-            ix in old.vlines and old._drawLine(x + sx, width, False, p)
+            ix in old.vlines and old._drawLine(x + sx, width, False, blockSize, p)
 
             if (x - xx) % smallstep != 0:
                 p.drawLine(x + sx, 0, x + sx, width / 4)

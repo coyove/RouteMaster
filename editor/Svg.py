@@ -8,7 +8,7 @@ from PyQt5 import QtCore, QtGui, QtSvg
 from PyQt5.QtGui import QBrush, QColor, QPainter, QPen, QPixmap
 from PyQt5.QtWidgets import QMainWindow, QWidget
 
-from Common import BS, FLAGS, TR
+from Common import BS, FLAGS, TR, maybeName
 
 
 def _quote(s: str):
@@ -34,7 +34,7 @@ class SvgSearch:
         p = "bsicon_" + _quote(s).lower() + ".svg"
         if p in self.files:
             return self.files[p], self.fullpath(self.files[p])
-        if re.search(r"^[a-zA-Z1-4\~\-\@\+\.\(\)]+$", s) and not FLAGS["disable_download"]:
+        if maybeName(s) and not FLAGS["disable_download"]:
             SvgSource.Parent.loader.addTask(s)
         elif s[0].isascii() and s[0].isalpha():
             QtCore.qDebug(("guess '" + s + u"' failed").encode('utf-8'))

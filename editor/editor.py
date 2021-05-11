@@ -15,11 +15,11 @@ from PyQt5.QtWidgets import (QAction, QApplication, QDialog, QFileDialog,
                              QVBoxLayout, QWidget)
 
 from Common import (AP, APP_NAME, APP_VERSION, BLOCK_DIR, FLAGS, InkscapePath,
-                    LANG, LOGS, NEW_LINE, START_TIME, TR, WIN_WIDTH, VDialog, setLang)
+                    LANG, LOGS, NEW_LINE, START_TIME, TR, WIN_WIDTH, VDialog, setLang, startNew)
 from Map import Map
 from MapData import MapData, MapDataElement, SvgSource
 from MapExport import exportMapDataPng, exportMapDataSvg
-from Property import FileProperty, Property
+from Property import FileProperty, Logger, Property
 from Svg import SvgBar, SvgSearch, _quote
 
 AP.add_argument('file', nargs="?")
@@ -32,7 +32,7 @@ AP.add_argument('--disable-download', help="no wikimedia downloads", action="sto
 AP.add_argument("--inkscape", type=str, default="")
 AP.add_argument('--lang', help="UI language", type=str, default='')
 AP.add_argument('--debug-crash', help="DEBUG ONLY", action="store_true")
-AP.add_argument('--debug-fill', help="DEBUG ONLY", action="store_true")
+AP.add_argument('--debug-fill', help="DEBUG ONLY", type=int, default=0)
 args = AP.parse_args()
 FLAGS['show_keys'] = args.show_keys
 FLAGS['hide_ruler'] = args.hide_ruler
@@ -43,51 +43,6 @@ FLAGS['DEBUG_fill'] = args.debug_fill
 Map.Background = QtGui.QColor(args.background)
 args.lang and setLang(args.lang)
 logfile = open('logs.txt', 'ab+')
-
-class Logger(QDialog):
-    def __init__(self, parent: typing.Optional[QWidget]) -> None:
-        super().__init__(parent=parent)
-        self.setWindowTitle(APP_NAME)
-        box = QVBoxLayout(self)
-        self.log = QListWidget(self)
-        self.log.addItems(LOGS)
-        self.log.setFont(QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.SystemFont.FixedFont))
-        box.addWidget(self.log)
-
-        w = QWidget(self)
-        hbox = QHBoxLayout(w)
-        btn = QPushButton(TR('OK'), self)
-        btn.clicked.connect(lambda: self.close())
-        btn.setFixedSize(btn.sizeHint())
-        hbox.addWidget(btn)
-        btn = QPushButton(TR('Clear Logs') + ' ({:.2f}K)'.format(os.stat('logs.txt').st_size / 1024), self)
-        btn.clicked.connect(lambda: self.clearLog())
-        btn.setFixedSize(btn.sizeHint())
-        hbox.addWidget(btn)
-        btn = QPushButton(TR('Hide Debugs'), self)
-        btn.clicked.connect(lambda: self.nonDebugLog())
-        btn.setFixedSize(btn.sizeHint())
-        hbox.addWidget(btn)
-
-        box.addWidget(w)
-        # self.setFixedSize(self.sizeHint())
-        self.showMaximized()
-        self.log.scrollToBottom()
-
-    def clearLog(self):
-        global logfile
-        LOGS.clear()
-        self.log.clear()
-        logfile.close()
-        os.remove("logs.txt")
-        logfile = open('logs.txt', 'ab+')
-    
-    def nonDebugLog(self):
-        self.log.clear()
-        for i in LOGS:
-            if not i.startswith('0;'):
-                self.log.addItem(i)
-        self.log.scrollToBottom()
 
 class About(VDialog):
     def __init__(self, parent: typing.Optional[QWidget]) -> None:
@@ -172,6 +127,7 @@ class Window(QMainWindow):
         
         self.topMenus = {}
         self._addMenu(TR('&File'), TR('&New'), 'Ctrl+N', self.doNew)
+        self._addMenu(TR('&File'), TR('&New Window'), 'Ctrl+Shift+N', lambda x: startNew())
         self._addMenu(TR('&File'), '-')
         self._addMenu(TR('&File'), TR('&Open'), 'Ctrl+O', self.doOpen)
         self._addMenu(TR('&File'), '-')
@@ -195,9 +151,9 @@ class Window(QMainWindow):
         self._addMenu(TR('&Edit'), TR('&Copy'), '', lambda x: self.mapview.actCopy())
         self._addMenu(TR('&Edit'), TR('&Paste'), '', lambda x: self.mapview.actPaste())
         self._addMenu(TR('&Edit'), '-')
-        self._addMenu(TR('&Edit'), TR('&Clear History'), '', lambda x: self.mapview.data.clearHistory())
+        self._addMenu(TR('&Edit'), TR('&Clear History'), 'Ctrl+K', lambda x: self.mapview.data.clearHistory())
         self._addMenu(TR('&Edit'), '-')
-        self._addMenu(TR('&Edit'), TR('&Select by Text'), '', lambda x: self.mapview.actSelectByText())
+        self._addMenu(TR('&Edit'), TR('&Select by Text'), 'Ctrl+F', lambda x: self.mapview.actSelectByText())
         
         self._addMenu(TR('&View'), TR('&Center'), '', lambda x: self.mapview.center())
         self._addMenu(TR('&View'), TR('Center &Selected'), 'Ctrl+Shift+H', lambda x: self.mapview.center(selected=True))
@@ -208,7 +164,7 @@ class Window(QMainWindow):
         self.mapview.showRuler = not FLAGS["hide_ruler"]
         self.showRuler.setChecked(self.mapview.showRuler)
         self._addMenu(TR('&View'), '-')
-        self._addMenu(TR('&View'), TR('&Logs'), '', lambda x: Logger(self).exec_())
+        self._addMenu(TR('&View'), TR('&Logs'), '', lambda x: Logger(self, logfile).exec_())
 
         self._addMenu(TR('&Help'), TR('&About'), '', lambda x: About(self).exec_()).setMenuRole(QAction.MenuRole.AboutRole)
 
@@ -332,7 +288,9 @@ class Window(QMainWindow):
                 if fn == "":
                     fn = crashfn
                 else:
-                    shutil.copy2(fn, fn + ".old")
+                    filename = os.path.basename(fn)
+                    dir = os.path.dirname(fn)
+                    shutil.copy2(fn, os.path.join(dir, "." + filename + ".old"))
                     shutil.copy2(crashfn, fn)
                 delcrash = True
             else:

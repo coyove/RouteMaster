@@ -1,6 +1,9 @@
 import json
+import os
 import re
 import typing
+
+from PyQt5 import QtGui
 
 from PyQt5 import QtCore
 from PyQt5.QtGui import QFontDatabase
@@ -10,7 +13,7 @@ from PyQt5.QtWidgets import (QApplication, QComboBox, QDialog, QHBoxLayout, QLab
                              QTableWidgetItem, QTabWidget, QTextEdit,
                              QTreeView, QVBoxLayout, QWidget)
 
-from Common import APP_NAME, TR, WIN_WIDTH, ispngployfill
+from Common import APP_NAME, LOGS, TR, WIN_WIDTH, ispngployfill
 from MapData import MapData, MapDataElement
 from Svg import SvgBar, SvgSearch, SvgSource
 
@@ -348,3 +351,55 @@ class FileProperty(QDialog):
         self.meta["author"] = self.author.text()
         self.meta["desc"] = self.desc.toPlainText()
         self.close()
+
+class Logger(QDialog):
+    def __init__(self, parent: typing.Optional[QWidget], logfile) -> None:
+        super().__init__(parent=parent)
+        self.logfile = logfile
+
+        self.setWindowTitle(APP_NAME)
+        box = QVBoxLayout(self)
+        self.log = QListWidget(self)
+        self.log.addItems(LOGS)
+        self.log.setFont(QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.SystemFont.FixedFont))
+        self.log.doubleClicked.connect(self.open)
+        box.addWidget(self.log)
+
+        w = QWidget(self)
+        hbox = QHBoxLayout(w)
+        btn = QPushButton(TR('OK'), self)
+        btn.clicked.connect(lambda: self.close())
+        btn.setFixedSize(btn.sizeHint())
+        hbox.addWidget(btn)
+        btn = QPushButton(TR('Clear Logs') + ' ({:.2f}K)'.format(os.stat('logs.txt').st_size / 1024), self)
+        btn.clicked.connect(lambda: self.clearLog())
+        btn.setFixedSize(btn.sizeHint())
+        hbox.addWidget(btn)
+        btn = QPushButton(TR('Hide Debugs'), self)
+        btn.clicked.connect(lambda: self.nonDebugLog())
+        btn.setFixedSize(btn.sizeHint())
+        hbox.addWidget(btn)
+
+        box.addWidget(w)
+        # self.setFixedSize(self.sizeHint())
+        self.showMaximized()
+        self.log.scrollToBottom()
+
+    def clearLog(self):
+        global logfile
+        LOGS.clear()
+        self.log.clear()
+        self.logfile.close()
+        os.remove("logs.txt")
+        logfile = open('logs.txt', 'ab+')
+    
+    def nonDebugLog(self):
+        self.log.clear()
+        for i in LOGS:
+            if not i.startswith('0;'):
+                self.log.addItem(i)
+        self.log.scrollToBottom()
+
+    def open(self):
+        i = self.log.selectedItems()
+        i and 'inkscape' in i[0].text() and QtGui.QDesktopServices.openUrl(QtCore.QUrl("https://inkscape.org/"))

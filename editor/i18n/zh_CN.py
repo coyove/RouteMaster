@@ -5,6 +5,7 @@ dict = {
     "&View": "查看(&V)",
     "&Help": "帮助(&H)",
     "&New": "新建(&N)",
+    "&New Window": "新建窗口(&W)",
     "&Open": "打开(&O)",
     "Open": "打开",
     "Failed to open {}": "打开",

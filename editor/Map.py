@@ -44,8 +44,10 @@ class Map(QWidget):
                         <text x="8" y="24" fill="red">{}</text>
                         <rect x="8" y="8" width="32" height="32" fill="transparent" stroke="#000"></rect>
                     </svg>""".format(i).encode('utf-8'), BS, BS))
-            for i in range(0, 1000):
-                l = int(random.random() * 15 + 10)
+            n = FLAGS["DEBUG_fill"]
+            s = math.sqrt(n)
+            for i in range(0, n):
+                l = int(random.random() * s + 1)
                 d = random.random() * math.pi * 2
                 x, y = int(l * math.cos(d)), int(l * math.sin(d))
                 el = MapDataElement(sources[random.randrange(0, len(sources))])

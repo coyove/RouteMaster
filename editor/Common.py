@@ -71,3 +71,19 @@ def InkscapePath():
     if 'not found' in out.lower():
         return ""
     return out
+
+def startNew():
+    import subprocess
+    args = sys.argv[:]
+    args.insert(0, sys.executable)
+    if sys.platform == 'win32':
+        args = ['"%s"' % arg for arg in args]
+    os.chdir(os.getcwd())
+    subprocess.Popen(args)
+
+def maybeName(s):
+    import re
+    if re.search(r"^[a-zA-Z1-4\~\-\@\+\.\(\)]+$", s):
+        if re.search(r"[a-zA-Z]+", s):
+            return True
+    return False
